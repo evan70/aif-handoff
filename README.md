@@ -232,6 +232,11 @@ Only ports 80/443 are exposed. API is bound to localhost only. Includes security
 | `PROJECTS_DIR`      | `./projects` | Host directory for project files (dev)    |
 | `PROJECTS_MOUNT`    | `/home/www`  | Project files path inside containers      |
 
+In Docker, project roots are used by processes inside the containers. Host paths
+under `PROJECTS_DIR` are accepted in the UI and automatically saved as the
+matching `PROJECTS_MOUNT` path, so `/Users/me/projects/app` becomes
+`/home/www/app` with the default mount.
+
 A `.devcontainer/` config is also included for JetBrains / VS Code.
 
 ## Scripts

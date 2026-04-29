@@ -75,10 +75,12 @@ describe("projects API", () => {
   let app: ReturnType<typeof createApp>;
 
   beforeEach(() => {
+    vi.clearAllMocks();
     testDb.current = createTestDb();
     app = createApp();
     mockBroadcast.mockReset();
     mockInternalBroadcastToken.value = "";
+    vi.unstubAllEnvs();
     vi.stubEnv("NODE_ENV", "test");
   });
 
@@ -119,6 +121,51 @@ describe("projects API", () => {
     expect(res.status).toBe(400);
     const body = await res.json();
     expect(body.error).toBeDefined();
+  });
+
+  it("maps Docker host project paths to the container project mount on create", async () => {
+    vi.stubEnv("PROJECTS_DIR", "/Users/dev/projects");
+    vi.stubEnv("PROJECTS_MOUNT", "/home/www");
+    const { initProject: initProjectMock } = await import("@aif/runtime");
+
+    const res = await app.request("/projects", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: "Docker Project",
+        rootPath: "/Users/dev/projects/demo",
+      }),
+    });
+
+    expect(res.status).toBe(201);
+    const body = await res.json();
+    expect(body.rootPath).toBe("/home/www/demo");
+    expect(initProjectMock).toHaveBeenCalledWith({
+      projectRoot: "/home/www/demo",
+      registry: expect.anything(),
+    });
+  });
+
+  it("maps Docker host project paths to the container project mount on update", async () => {
+    vi.stubEnv("PROJECTS_DIR", "/Users/dev/projects");
+    vi.stubEnv("PROJECTS_MOUNT", "/workspace");
+    const db = testDb.current;
+    db.insert(projects)
+      .values({ id: "docker-proj", name: "Docker", rootPath: "/workspace/old" })
+      .run();
+
+    const res = await app.request("/projects/docker-proj", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: "Docker Updated",
+        rootPath: "/Users/dev/projects/demo",
+      }),
+    });
+
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.rootPath).toBe("/workspace/demo");
   });
 
   it("returns MCP servers from .mcp.json", async () => {

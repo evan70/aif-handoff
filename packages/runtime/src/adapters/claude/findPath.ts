@@ -1,6 +1,6 @@
 import { existsSync } from "node:fs";
 import { execFileSync } from "node:child_process";
-import { join, resolve, win32 as pathWin32 } from "node:path";
+import { extname, join, resolve, win32 as pathWin32 } from "node:path";
 
 function normalizePathValue(path: string | null | undefined): string | undefined {
   if (!path) return undefined;
@@ -21,10 +21,14 @@ function isWindowsClaudeWrapperBasename(name: string): boolean {
 export function resolveClaudeSdkExecutablePath(
   path: string | null | undefined,
   platform = process.platform,
+  options: { allowBareUnixExecutable?: boolean } = {},
 ): string | undefined {
   const normalizedPath = normalizePathValue(path);
   if (!normalizedPath) return undefined;
   if (platform !== "win32") {
+    if (!options.allowBareUnixExecutable && extname(normalizedPath) === "") {
+      return undefined;
+    }
     return normalizedPath;
   }
 

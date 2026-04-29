@@ -1,7 +1,13 @@
 #!/bin/sh
-# Fix ownership of mounted volumes, then drop to node user
+# Fix ownership of app-owned volumes, then drop to node user.
+# Do not chown the projects bind mount: on Docker Desktop a recursive ownership
+# pass over a host projects directory can make startup appear hung.
 if [ "$(id -u)" = "0" ]; then
-  chown -R node:node /data /home/www /home/node/.claude /home/node/.claude.json /home/node/.codex 2>/dev/null || true
+  install -d -o node -g node /data /home/node/.claude /home/node/.codex 2>/dev/null || true
+  chown -R node:node /data /home/node/.claude /home/node/.codex 2>/dev/null || true
+  if [ -e /home/node/.claude.json ]; then
+    chown node:node /home/node/.claude.json 2>/dev/null || true
+  fi
   export HOME=/home/node
   exec gosu node "$@"
 else

@@ -58,6 +58,12 @@ Docker-specific environment variables:
 | `PROJECTS_DIR`      | `./projects` | Host directory for project files (dev) |
 | `PROJECTS_MOUNT`    | `/home/www`  | Project files path inside containers   |
 
+When running in Docker, `PROJECTS_DIR` is the host directory mounted into the
+containers at `PROJECTS_MOUNT`. If you create a project with a host path under
+`PROJECTS_DIR` (for example `/Users/me/projects/app`), the API stores the
+container path automatically (for example `/home/www/app`) so agents can access
+the files from inside the container.
+
 ## Installation without Docker
 
 ```bash
