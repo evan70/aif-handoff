@@ -1,6 +1,6 @@
 import { execFileSync, type ExecFileSyncOptionsWithStringEncoding } from "node:child_process";
-import { existsSync } from "node:fs";
-import { join } from "node:path";
+import { cpSync, existsSync, mkdirSync, readdirSync, statSync } from "node:fs";
+import { basename, dirname, join, resolve } from "node:path";
 import { logger } from "./logger.js";
 import { getProjectConfig, type AifProjectGit } from "./projectConfig.js";
 
@@ -17,7 +17,9 @@ export class BranchIsolationError extends Error {
     | "create_failed"
     | "invalid_branch_name"
     | "git_disabled_with_persisted_branch"
-    | "not_a_repo_with_persisted_branch";
+    | "not_a_repo_with_persisted_branch"
+    | "worktree_create_failed"
+    | "worktree_path_collision";
   readonly branchName: string | null;
   readonly projectRoot: string;
 
@@ -53,6 +55,21 @@ export interface EnsureFeatureBranchResult {
   reason?: string;
 }
 
+export interface EnsureTaskWorktreeInput {
+  projectRoot: string;
+  taskId: string;
+  title: string;
+  explicitBranchName?: string | null;
+  explicitWorktreePath?: string | null;
+}
+
+export interface EnsureTaskWorktreeResult {
+  action: "skipped" | "created" | "reused";
+  branchName: string | null;
+  worktreePath: string | null;
+  reason?: string;
+}
+
 const BRANCH_SLUG_MAX = 40;
 
 export function slugifyTitle(title: string): string {
@@ -71,6 +88,25 @@ export function buildBranchName(prefix: string, title: string, taskId: string): 
   const slug = slugifyTitle(title);
   const shortId = taskId.replace(/-/g, "").slice(0, 6);
   return `${normalizedPrefix}${slug}-${shortId}`;
+}
+
+function sanitizeWorktreeSegment(value: string): string {
+  const sanitized = value
+    .replace(/[^a-zA-Z0-9._-]+/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  return sanitized || "task";
+}
+
+export function buildTaskWorktreePath(
+  projectRoot: string,
+  branchName: string,
+  taskId: string,
+): string {
+  const projectName = basename(projectRoot);
+  const branchSegment = sanitizeWorktreeSegment(branchName.replace(/\//g, "-"));
+  const taskSegment = sanitizeWorktreeSegment(taskId);
+  return resolve(dirname(projectRoot), `${projectName}-${branchSegment}-${taskSegment}`);
 }
 
 function runGit(
@@ -322,6 +358,158 @@ function resolveBaseBranch(
 export function projectUsesSharedBranchIsolation(projectRoot: string): boolean {
   const config = resolveGitConfig(projectRoot);
   return config.enabled && config.create_branches && isGitRepo(projectRoot);
+}
+
+export function projectSupportsTaskWorktrees(projectRoot: string): boolean {
+  return projectUsesSharedBranchIsolation(projectRoot);
+}
+
+function copyPathIfExists(source: string, destination: string): void {
+  if (!existsSync(source)) return;
+  mkdirSync(dirname(destination), { recursive: true });
+  cpSync(source, destination, { recursive: true, force: true });
+}
+
+function copyLatestPatchFiles(
+  projectRoot: string,
+  worktreePath: string,
+  patchesPath: string,
+): void {
+  const sourceDir = resolve(projectRoot, patchesPath);
+  if (!existsSync(sourceDir) || !statSync(sourceDir).isDirectory()) return;
+
+  const entries = readdirSync(sourceDir)
+    .map((name) => {
+      const fullPath = join(sourceDir, name);
+      const stats = statSync(fullPath);
+      return { name, fullPath, mtimeMs: stats.mtimeMs, isFile: stats.isFile() };
+    })
+    .filter((entry) => entry.isFile && entry.name !== "patch-cursor.json")
+    .sort((a, b) => b.mtimeMs - a.mtimeMs)
+    .slice(0, 10);
+
+  const destinationDir = resolve(worktreePath, patchesPath);
+  mkdirSync(destinationDir, { recursive: true });
+  for (const entry of entries) {
+    copyPathIfExists(entry.fullPath, join(destinationDir, entry.name));
+  }
+}
+
+function copyProjectContextToWorktree(projectRoot: string, worktreePath: string): void {
+  const cfg = getProjectConfig(projectRoot);
+  const contextFiles = [
+    ".ai-factory/config.yaml",
+    cfg.paths.description,
+    cfg.paths.architecture,
+    cfg.paths.research,
+    "AGENTS.md",
+    "CLAUDE.md",
+  ];
+  const contextDirs = [".claude", ".ai-factory/skill-context"];
+  const requiredParentPaths = [
+    cfg.paths.plan,
+    cfg.paths.fix_plan,
+    cfg.paths.roadmap,
+    cfg.paths.patches,
+    cfg.paths.evolutions,
+    cfg.paths.evolution,
+  ];
+
+  for (const relativePath of requiredParentPaths) {
+    mkdirSync(dirname(resolve(worktreePath, relativePath)), { recursive: true });
+  }
+
+  for (const relativePath of contextFiles) {
+    copyPathIfExists(resolve(projectRoot, relativePath), resolve(worktreePath, relativePath));
+  }
+  for (const relativePath of contextDirs) {
+    copyPathIfExists(resolve(projectRoot, relativePath), resolve(worktreePath, relativePath));
+  }
+  copyLatestPatchFiles(projectRoot, worktreePath, cfg.paths.patches);
+}
+
+export function ensureTaskWorktree(input: EnsureTaskWorktreeInput): EnsureTaskWorktreeResult {
+  const { projectRoot, taskId, title, explicitBranchName, explicitWorktreePath } = input;
+  const config = resolveGitConfig(projectRoot);
+
+  if (!config.enabled) {
+    return { action: "skipped", branchName: null, worktreePath: null, reason: "git.enabled=false" };
+  }
+  if (!isGitRepo(projectRoot)) {
+    return {
+      action: "skipped",
+      branchName: null,
+      worktreePath: null,
+      reason: "not a git work tree",
+    };
+  }
+  if (!config.create_branches) {
+    return {
+      action: "skipped",
+      branchName: null,
+      worktreePath: null,
+      reason: "git.create_branches=false",
+    };
+  }
+
+  const branchName = explicitBranchName?.trim()
+    ? explicitBranchName.trim()
+    : buildBranchName(config.branch_prefix, title, taskId);
+  validateBranchName(projectRoot, branchName);
+
+  const worktreePath = explicitWorktreePath?.trim()
+    ? resolve(explicitWorktreePath.trim())
+    : buildTaskWorktreePath(projectRoot, branchName, taskId);
+
+  if (existsSync(worktreePath)) {
+    if (isGitRepo(worktreePath) && getCurrentBranch(worktreePath) === branchName) {
+      copyProjectContextToWorktree(projectRoot, worktreePath);
+      return { action: "reused", branchName, worktreePath };
+    }
+    throw new BranchIsolationError(
+      "worktree_path_collision",
+      `Worktree path ${worktreePath} already exists and is not bound to ${branchName}.`,
+      projectRoot,
+      branchName,
+    );
+  }
+
+  const resolvedBaseBranch = resolveBaseBranch(
+    projectRoot,
+    config.base_branch,
+    hasProjectConfigFile(projectRoot),
+  );
+  const baseRef = resolvedBaseBranch.createFromRemote
+    ? `origin/${resolvedBaseBranch.branchName}`
+    : resolvedBaseBranch.branchName;
+  if (
+    !resolvedBaseBranch.createFromRemote &&
+    !branchExists(projectRoot, resolvedBaseBranch.branchName)
+  ) {
+    throw new BranchIsolationError(
+      "base_branch_unavailable",
+      `Base branch ${resolvedBaseBranch.branchName} does not exist in ${projectRoot}. Cannot create worktree branch ${branchName} from a known base.`,
+      projectRoot,
+      branchName,
+    );
+  }
+
+  const args = branchExists(projectRoot, branchName)
+    ? ["worktree", "add", worktreePath, branchName]
+    : ["worktree", "add", "-b", branchName, worktreePath, baseRef];
+  const { status, stderr } = runGit(projectRoot, args, { ignoreExit: true });
+  if (status !== 0) {
+    throw new BranchIsolationError(
+      "worktree_create_failed",
+      `git ${args.join(" ")} failed: ${stderr || "unknown error"}`,
+      projectRoot,
+      branchName,
+    );
+  }
+
+  copyProjectContextToWorktree(projectRoot, worktreePath);
+  log.info({ projectRoot, worktreePath, branchName, taskId }, "Created task worktree");
+  return { action: "created", branchName, worktreePath };
 }
 
 export function ensureFeatureBranch(input: EnsureFeatureBranchInput): EnsureFeatureBranchResult {

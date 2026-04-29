@@ -171,10 +171,8 @@ PUT /projects/:id
 
 **Response:** `200 OK` — the updated project object.
 
-**Errors:**
-
-- `400` — Parallel auto-queue is rejected when the project config has `git.create_branches=true`.
-  Disable parallel execution, disable auto-queue mode, or set `git.create_branches=false` before using both modes together.
+Parallel auto-queue can be combined with `git.create_branches=true`; the
+agent coordinator provisions per-task git worktrees for isolated execution.
 
 ### Check Roadmap Status
 
@@ -282,10 +280,8 @@ clients can update their board indicator.
 { "enabled": true }
 ```
 
-**Errors:**
-
-- `400` — Parallel auto-queue is rejected when the project config has `git.create_branches=true`.
-  Disable parallel execution, disable auto-queue mode, or set `git.create_branches=false` before using both modes together.
+Parallel auto-queue can be combined with `git.create_branches=true`; queued
+full-mode tasks receive isolated git worktrees when planning starts.
 
 ### Get Project MCP Config
 

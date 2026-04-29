@@ -234,8 +234,8 @@ describe("projects API", () => {
     expect(body.rootPath).toBe("/workspace/demo");
   });
 
-  it("rejects enabling parallel execution when auto-queue is already enabled and git.create_branches is true", async () => {
-    const rootPath = mkdtempSync(join(tmpdir(), "aif-parallel-auto-queue-"));
+  it("allows enabling parallel execution when auto-queue is already enabled and git.create_branches is true", async () => {
+    const rootPath = mkdtempSync("/tmp/aif-parallel-auto-queue-");
     testDb.current
       .insert(projects)
       .values({
@@ -256,11 +256,9 @@ describe("projects API", () => {
       }),
     });
 
-    expect(res.status).toBe(400);
+    expect(res.status).toBe(200);
     const body = await res.json();
-    expect(body.error).toContain("Parallel auto-queue with git.create_branches=true");
-    expect(body.error).toContain("disable parallel execution");
-    expect(body.error).toContain("set git.create_branches=false");
+    expect(body.parallelEnabled).toBe(true);
   });
 
   it("returns MCP servers from .mcp.json", async () => {
@@ -718,8 +716,8 @@ describe("projects API", () => {
       expect(await get.json()).toEqual({ enabled: true });
     });
 
-    it("PATCH rejects enabling auto-queue for parallel projects with git.create_branches=true", async () => {
-      const rootPath = mkdtempSync(join(tmpdir(), "aif-auto-queue-branch-"));
+    it("PATCH allows enabling auto-queue for parallel projects with git.create_branches=true", async () => {
+      const rootPath = mkdtempSync("/tmp/aif-auto-queue-branch-");
       testDb.current
         .insert(projects)
         .values({
@@ -736,10 +734,8 @@ describe("projects API", () => {
         body: JSON.stringify({ enabled: true }),
       });
 
-      expect(res.status).toBe(400);
-      const body = await res.json();
-      expect(body.error).toContain("Parallel auto-queue with git.create_branches=true");
-      expect(body.error).toContain("disable auto-queue mode");
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual({ enabled: true });
     });
 
     it("PATCH allows parallel auto-queue when git.create_branches=false", async () => {

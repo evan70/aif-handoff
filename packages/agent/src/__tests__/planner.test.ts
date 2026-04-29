@@ -268,6 +268,67 @@ describe("runPlanner comment selection", () => {
     expect(updatedTask?.branchName).toBe(branch);
   });
 
+  it("creates a task worktree for parallel auto-queue full planning", async () => {
+    const db = testDb.current;
+    const projectRoot = mkdtempSync(join(tmpdir(), "planner-worktree-"));
+    execFileSync("git", ["init", "--initial-branch=main"], { cwd: projectRoot, stdio: "ignore" });
+    execFileSync("git", ["config", "user.email", "t@t.local"], {
+      cwd: projectRoot,
+      stdio: "ignore",
+    });
+    execFileSync("git", ["config", "user.name", "T"], { cwd: projectRoot, stdio: "ignore" });
+    execFileSync("git", ["config", "commit.gpgsign", "false"], {
+      cwd: projectRoot,
+      stdio: "ignore",
+    });
+    writeFileSync(join(projectRoot, "README.md"), "# t\n");
+    execFileSync("git", ["add", "README.md"], { cwd: projectRoot, stdio: "ignore" });
+    execFileSync("git", ["commit", "-m", "init", "--no-verify"], {
+      cwd: projectRoot,
+      stdio: "ignore",
+    });
+
+    db.insert(projects)
+      .values({
+        id: "project-worktree",
+        name: "Worktree Project",
+        rootPath: projectRoot,
+        parallelEnabled: true,
+        autoQueueMode: true,
+      })
+      .run();
+    db.insert(tasks)
+      .values({
+        id: "task-worktree-1",
+        projectId: "project-worktree",
+        title: "Parallel worktree",
+        description: "",
+        status: "planning",
+        plannerMode: "full",
+        useSubagents: true,
+      })
+      .run();
+
+    await runPlanner("task-worktree-1", projectRoot);
+
+    const sharedBranch = execFileSync("git", ["rev-parse", "--abbrev-ref", "HEAD"], {
+      cwd: projectRoot,
+      encoding: "utf8",
+    }).trim();
+    const updatedTask = db.select().from(tasks).where(eq(tasks.id, "task-worktree-1")).get();
+
+    expect(sharedBranch).toBe("main");
+    expect(updatedTask?.branchName).toMatch(/^feature\/parallel-worktree-/);
+    expect(updatedTask?.worktreePath).toContain("planner-worktree-");
+    expect(updatedTask?.worktreePath).toContain("task-worktree-1");
+    expect(
+      execFileSync("git", ["rev-parse", "--abbrev-ref", "HEAD"], {
+        cwd: updatedTask?.worktreePath ?? projectRoot,
+        encoding: "utf8",
+      }).trim(),
+    ).toBe(updatedTask?.branchName);
+  });
+
   it("restores persisted branch in fast plannerMode for already-bound task (mode-drift safe)", async () => {
     const db = testDb.current;
     const projectRoot = mkdtempSync(join(tmpdir(), "planner-mode-drift-"));

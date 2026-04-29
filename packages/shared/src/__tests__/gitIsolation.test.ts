@@ -9,8 +9,10 @@ import {
   BranchIsolationError,
   branchExists,
   buildBranchName,
+  buildTaskWorktreePath,
   describeDirtyWorkingTree,
   ensureFeatureBranch,
+  ensureTaskWorktree,
   getCurrentBranch,
   isBranchIsolationError,
   isGitRepo,
@@ -52,14 +54,19 @@ function initRepo(projectRoot: string): void {
 
 describe("gitIsolation", () => {
   let projectRoot: string;
+  let extraPaths: string[];
 
   beforeEach(() => {
     projectRoot = mkdtempSync(join(tmpdir(), "aif-git-isolation-"));
+    extraPaths = [];
     clearProjectConfigCache();
   });
 
   afterEach(() => {
     clearProjectConfigCache();
+    for (const extraPath of extraPaths) {
+      rmSync(extraPath, { recursive: true, force: true });
+    }
     rmSync(projectRoot, { recursive: true, force: true });
   });
 
@@ -107,6 +114,34 @@ describe("gitIsolation", () => {
         branchName: "feature/add-billing-retry-123456",
       });
       expect(getCurrentBranch(projectRoot)).toBe("feature/add-billing-retry-123456");
+    },
+    GIT_TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "creates an isolated task worktree without switching the shared checkout",
+    () => {
+      initRepo(projectRoot);
+      writeConfig(projectRoot, "git:\n  base_branch: main\n  branch_prefix: feature/\n");
+      writeFileSync(join(projectRoot, "CLAUDE.md"), "project instructions\n");
+
+      const taskId = "12345678-0000-0000-0000-000000000000";
+      const branchName = "feature/worktree-task-123456";
+      const worktreePath = buildTaskWorktreePath(projectRoot, branchName, taskId);
+      extraPaths.push(worktreePath);
+
+      const result = ensureTaskWorktree({
+        projectRoot,
+        taskId,
+        title: "Worktree task",
+        explicitBranchName: branchName,
+      });
+
+      expect(result).toEqual({ action: "created", branchName, worktreePath });
+      expect(getCurrentBranch(projectRoot)).toBe("main");
+      expect(getCurrentBranch(worktreePath)).toBe(branchName);
+      expect(existsSync(join(worktreePath, ".ai-factory", "config.yaml"))).toBe(true);
+      expect(existsSync(join(worktreePath, "CLAUDE.md"))).toBe(true);
     },
     GIT_TEST_TIMEOUT_MS,
   );

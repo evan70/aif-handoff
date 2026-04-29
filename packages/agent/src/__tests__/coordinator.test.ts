@@ -135,6 +135,31 @@ describe("coordinator", () => {
     expect(task!.status).toBe("done");
   });
 
+  it("should use task worktreePath as cwd for all downstream stages", async () => {
+    const db = testDb.current;
+    db.insert(tasks)
+      .values({
+        id: "task-worktree",
+        projectId: "test-project",
+        title: "Worktree task",
+        status: "planning",
+        branchName: "feature/worktree-task",
+        worktreePath: "/tmp/test-worktree",
+      })
+      .run();
+
+    await pollAndProcess();
+
+    expect(runPlanner).toHaveBeenCalledWith("task-worktree", "/tmp/test-worktree");
+    expect(runPlanChecker).toHaveBeenCalledWith("task-worktree", "/tmp/test-worktree");
+    expect(runImplementer).toHaveBeenCalledWith("task-worktree", "/tmp/test-worktree");
+    expect(runReviewer).toHaveBeenCalledWith("task-worktree", "/tmp/test-worktree");
+    expect(handleAutoReviewGate).toHaveBeenCalledWith({
+      taskId: "task-worktree",
+      projectRoot: "/tmp/test-worktree",
+    });
+  });
+
   it("should ignore backlog tasks until human starts AI", async () => {
     const db = testDb.current;
     db.insert(tasks)
