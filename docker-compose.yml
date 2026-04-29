@@ -16,9 +16,12 @@ services:
       - PORT=3009
       - AIF_ENABLE_CODEX_LOGIN_PROXY=true
       - AGENT_INTERNAL_URL=http://agent:3010
+      - PROJECTS_DIR=${PROJECTS_DIR:-${PWD}/projects}
+      - PROJECTS_HOST_ROOT=${PWD}
+      - PROJECTS_MOUNT=${PROJECTS_MOUNT:-/home/www}
     volumes:
       - db-data:/data
-      - ${PROJECTS_DIR:-./projects}:${PROJECTS_MOUNT:-/home/www}
+      - ${PROJECTS_DIR:-${PWD}/projects}:${PROJECTS_MOUNT:-/home/www}
       - claude-auth:/home/node/.claude
       - codex-auth:/home/node/.codex
     restart: unless-stopped
@@ -55,11 +58,14 @@ services:
       - AIF_ENABLE_CODEX_LOGIN_PROXY=true
       - AIF_CODEX_LOGIN_BROKER_PORT=3010
       - AGENT_INTERNAL_URL=http://agent:3010
+      - PROJECTS_DIR=${PROJECTS_DIR:-${PWD}/projects}
+      - PROJECTS_HOST_ROOT=${PWD}
+      - PROJECTS_MOUNT=${PROJECTS_MOUNT:-/home/www}
     expose:
       - "3010"
     volumes:
       - db-data:/data
-      - ${PROJECTS_DIR:-./projects}:${PROJECTS_MOUNT:-/home/www}
+      - ${PROJECTS_DIR:-${PWD}/projects}:${PROJECTS_MOUNT:-/home/www}
       - claude-auth:/home/node/.claude
       - codex-auth:/home/node/.codex
     depends_on:
@@ -82,9 +88,12 @@ services:
       - DATABASE_URL=/data/aif.sqlite
       - MCP_TRANSPORT=http
       - MCP_PORT=3100
+      - PROJECTS_DIR=${PROJECTS_DIR:-${PWD}/projects}
+      - PROJECTS_HOST_ROOT=${PWD}
+      - PROJECTS_MOUNT=${PROJECTS_MOUNT:-/home/www}
     volumes:
       - db-data:/data
-      - ${PROJECTS_DIR:-./projects}:${PROJECTS_MOUNT:-/home/www}
+      - ${PROJECTS_DIR:-${PWD}/projects}:${PROJECTS_MOUNT:-/home/www}
     depends_on:
       - api
     restart: unless-stopped

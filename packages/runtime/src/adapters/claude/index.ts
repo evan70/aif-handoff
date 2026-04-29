@@ -146,9 +146,21 @@ function normalizeSdkExecutablePath(
   path: string | null | undefined,
   logger: ClaudeRuntimeAdapterLogger,
   runtimeId: string,
+  options: { explicitPath?: boolean } = {},
 ): string | undefined {
-  const normalized = resolveClaudeSdkExecutablePath(path);
+  const normalized = resolveClaudeSdkExecutablePath(path, process.platform, {
+    allowBareUnixExecutable: options.explicitPath,
+  });
   if (process.platform !== "win32" || !path) {
+    if (path && !normalized) {
+      logger.warn(
+        {
+          runtimeId,
+          wrapperPath: path,
+        },
+        "Dropped auto-discovered Claude SDK wrapper path and deferred to Agent SDK lookup",
+      );
+    }
     return normalized;
   }
   if (normalized && normalized !== path) {
@@ -263,6 +275,7 @@ async function listClaudeModels(
       configuredCliPath ?? adapterDefaults?.pathToClaudeCodeExecutable,
       logger,
       input.runtimeId,
+      { explicitPath: Boolean(configuredCliPath) },
     ),
   });
   const modelDiscoveryAbortController = new AbortController();

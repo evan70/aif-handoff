@@ -15,9 +15,19 @@ function createModelDiscoveryInput(overrides: Record<string, unknown> = {}) {
   };
 }
 
+function clearProxyEnv() {
+  vi.stubEnv("HTTP_PROXY", undefined);
+  vi.stubEnv("HTTPS_PROXY", undefined);
+  vi.stubEnv("NO_PROXY", undefined);
+  vi.stubEnv("http_proxy", undefined);
+  vi.stubEnv("https_proxy", undefined);
+  vi.stubEnv("no_proxy", undefined);
+}
+
 describe("codex model discovery process helpers", () => {
   beforeEach(() => {
     vi.unstubAllEnvs();
+    clearProxyEnv();
   });
 
   afterEach(() => {

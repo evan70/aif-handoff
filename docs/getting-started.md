@@ -46,17 +46,30 @@ Only ports 80/443 exposed. Security hardening, healthchecks, resource limits, an
 
 Docker-specific environment variables:
 
-| Variable            | Default      | Description                            |
-| ------------------- | ------------ | -------------------------------------- |
-| `ANTHROPIC_API_KEY` | —            | API key (or use `claude login`)        |
-| `DOMAIN`            | `localhost`  | Domain for SSL certificate (ACME)      |
-| `PORT`              | `3009`       | Host port for API                      |
-| `WEB_PORT`          | `5180`       | Host port for Web UI (dev)             |
-| `WEB_HOST`          | `localhost`  | Web UI dev server host (Vite)          |
-| `HTTP_PORT`         | `80`         | Host port for Web UI (production)      |
-| `HTTPS_PORT`        | `443`        | HTTPS port (production)                |
-| `PROJECTS_DIR`      | `./projects` | Host directory for project files (dev) |
-| `PROJECTS_MOUNT`    | `/home/www`  | Project files path inside containers   |
+| Variable             | Default      | Description                                                  |
+| -------------------- | ------------ | ------------------------------------------------------------ |
+| `ANTHROPIC_API_KEY`  | —            | API key (or use `claude login`)                              |
+| `DOMAIN`             | `localhost`  | Domain for SSL certificate (ACME)                            |
+| `PORT`               | `3009`       | Host port for API                                            |
+| `WEB_PORT`           | `5180`       | Host port for Web UI (dev)                                   |
+| `WEB_HOST`           | `localhost`  | Web UI dev server host (Vite)                                |
+| `HTTP_PORT`          | `80`         | Host port for Web UI (production)                            |
+| `HTTPS_PORT`         | `443`        | HTTPS port (production)                                      |
+| `PROJECTS_DIR`       | `./projects` | Host directory for project files (dev)                       |
+| `PROJECTS_MOUNT`     | `/home/www`  | Project files path inside containers                         |
+| `PROJECTS_HOST_ROOT` | `${PWD}`     | Compose-internal repo root for relative `PROJECTS_DIR` (dev) |
+
+When running the dev Docker Compose setup, `PROJECTS_DIR` is the host directory
+mounted into the containers at `PROJECTS_MOUNT`. If you create a project with a
+host path under `PROJECTS_DIR` (for example `/Users/me/projects/app`), the API
+stores the container path automatically (for example `/home/www/app`) so agents
+can access the files from inside the container. Relative `PROJECTS_DIR` values
+are resolved from `PROJECTS_HOST_ROOT`, which `docker-compose.yml` sets from the
+repository directory; leave it unset unless you are replacing the compose wiring.
+
+Production Compose uses a named Docker volume at `PROJECTS_MOUNT` instead of
+the dev bind mount. In production, create and select projects by their
+in-container path, for example `/home/www/app`.
 
 ## Installation without Docker
 

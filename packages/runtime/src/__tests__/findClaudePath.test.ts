@@ -113,8 +113,22 @@ describe("findClaudePath", () => {
     expect(resolveClaudeSdkExecutablePath(nativeExecutablePath, "win32")).toBe(
       nativeExecutablePath,
     );
-    expect(resolveClaudeSdkExecutablePath("/usr/local/bin/claude", "linux")).toBe(
-      "/usr/local/bin/claude",
-    );
+    expect(
+      resolveClaudeSdkExecutablePath("/usr/local/bin/claude", "linux", {
+        allowBareUnixExecutable: true,
+      }),
+    ).toBe("/usr/local/bin/claude");
+  });
+
+  it("drops auto-discovered bare Unix wrapper paths for SDK transport", async () => {
+    const { resolveClaudeSdkExecutablePath } = await loadFindClaudePath();
+    expect(resolveClaudeSdkExecutablePath("/usr/local/bin/claude", "linux")).toBeUndefined();
+  });
+
+  it("keeps JavaScript executable paths for SDK transport", async () => {
+    const { resolveClaudeSdkExecutablePath } = await loadFindClaudePath();
+    expect(
+      resolveClaudeSdkExecutablePath("/app/node_modules/claude-agent-sdk/cli.js", "linux"),
+    ).toBe("/app/node_modules/claude-agent-sdk/cli.js");
   });
 });

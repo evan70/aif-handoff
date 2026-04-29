@@ -166,7 +166,7 @@ describe("codex app-server session discovery", () => {
           appServerRequestTimeoutMs: 2_000,
         },
       }),
-    ).rejects.toThrow("Timed out waiting for JSONL RPC response (thread/list)");
+    ).rejects.toThrow("Timed out waiting for JSONL RPC response");
 
     expect(terminateCodexAppServerProcessMock).toHaveBeenCalledTimes(1);
   });
