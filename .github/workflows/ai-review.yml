@@ -1,25 +1,28 @@
 # Drop into your repo at .github/workflows/ai-review.yml.
 # Posts a signed webhook to the AI Review Runner on:
-#   1. PR opened — automatic first review.
+#   1. PR opened from the same repo — automatic first review.
 #   2. A trusted user posts one of these slash commands in a PR comment:
 #        /code-review            → review only
 #        /fix                    → apply fixes for the latest review verdict
 #        /code-review-and-fix    → review then fix (chained)
 #
 # Required secrets in the repo (or org):
-#   RUNNER_HMAC_SECRET   — same value the runner has at RUNNER_HMAC_SECRET / _FILE.
-#   RUNNER_URL           — e.g. https://runner.example.com/review
-#   RUNNER_GH_PAT        — fine-grained PAT with:
-#                            Contents:        Read   (review-only repos)
-#                            Contents:        Read & Write   (when /fix is enabled — push to PR branch)
-#                            Pull requests:   Read & Write
-#                            Issues:          Read & Write
-#                            Metadata:        Read
-#                          See README / DEPLOY.md for why GITHUB_TOKEN won't work
-#                          (it's revoked when this workflow job ends, but the
-#                          runner needs the token 30–180 s later.)
-#
-# Edit the TRUSTED list below to control who can re-trigger via comment.
+#   RUNNER_HMAC_SECRET    — same value the runner has at RUNNER_HMAC_SECRET / _FILE.
+#   RUNNER_URL            — e.g. https://runner.example.com/review
+#   RUNNER_GH_PAT         — fine-grained PAT with:
+#                             Contents:        Read   (review-only repos)
+#                             Contents:        Read & Write   (when /fix is enabled — push to PR branch)
+#                             Pull requests:   Read & Write
+#                             Issues:          Read & Write
+#                             Metadata:        Read
+#                           See README / DEPLOY.md for why GITHUB_TOKEN won't work
+#                           (it's revoked when this workflow job ends, but the
+#                           runner needs the token 30–180 s later.)
+#   RUNNER_TRUSTED_USERS  — JSON array string of GitHub logins allowed to re-trigger
+#                           via slash commands. Example: `["lee-to","alice"]`.
+#                           If unset / empty, slash-command triggers are blocked
+#                           and only same-repo `pull_request: opened` events
+#                           start a review.
 
 name: AI Review
 
@@ -37,16 +40,19 @@ permissions:
 jobs:
   ai-review:
     # Trigger on:
-    #   - PR opened (automatic first review)
+    #   - same-repo PR opened (automatic first review)
     #   - issue_comment on a PR, by a trusted user, containing one of the
     #     slash commands. Order in the if() matters only for documentation;
     #     `contains()` is unordered.
+    # Job-level `if:` cannot read `secrets`, so trusted-users whitelist is
+    # enforced in the bash step below. Here we only filter by event type +
+    # slash command structure; non-trusted senders fall through to a no-op
+    # exit in the step (workflow run still appears in Actions, but skipped).
     if: |
       github.event_name == 'pull_request' ||
       (github.event_name == 'issue_comment' &&
        github.event.issue.pull_request != null &&
        github.event.sender.type != 'Bot' &&
-       contains(fromJSON('["lee-to"]'), github.event.sender.login) &&
        (contains(github.event.comment.body, '/code-review-and-fix') ||
         contains(github.event.comment.body, '/code-review') ||
         contains(github.event.comment.body, '/fix')))
@@ -60,17 +66,34 @@ jobs:
           # PAT, NOT secrets.GITHUB_TOKEN — that one expires when the job
           # finishes, but the runner needs the token 30–180 s later.
           GH_TOKEN: ${{ secrets.RUNNER_GH_PAT }}
+          # JSON-array string, e.g. ["lee-to","alice"]. Empty/unset → no slash
+          # commands accepted; only same-repo `pull_request: opened` auto-fires.
+          TRUSTED_USERS: ${{ secrets.RUNNER_TRUSTED_USERS }}
         shell: bash
         run: |
           set -euo pipefail
           REPO="${GITHUB_REPOSITORY}"
 
-          # PR number + head_sha differ between event types.
+          # PR number + head_sha + action differ between event types.
           if [ "${{ github.event_name }}" = "pull_request" ]; then
+            if [ "${{ github.event.pull_request.head.repo.full_name }}" != "${{ github.repository }}" ]; then
+              echo "::notice::automatic review skipped for fork PR; a trusted maintainer can comment /code-review to run it"
+              exit 0
+            fi
+
             PR_NUMBER="${{ github.event.pull_request.number }}"
             HEAD_SHA="${{ github.event.pull_request.head.sha }}"
             ACTION="review"
           else
+            # issue_comment path — enforce trusted-users whitelist here
+            # (job-level `if:` can't read secrets in GitHub Actions).
+            SENDER="${{ github.event.sender.login }}"
+            TRUSTED_JSON="${TRUSTED_USERS:-[]}"
+            if ! echo "${TRUSTED_JSON}" | jq -e --arg u "${SENDER}" 'index($u) != null' >/dev/null 2>&1; then
+              echo "::notice::user '${SENDER}' is not in RUNNER_TRUSTED_USERS — skipping"
+              exit 0
+            fi
+
             PR_NUMBER="${{ github.event.issue.number }}"
             HEAD_SHA=$(gh pr view "${PR_NUMBER}" \
                 --repo "${REPO}" \
@@ -90,6 +113,15 @@ jobs:
               echo "::warning::no slash command matched; skipping"
               exit 0
             fi
+          fi
+
+          missing=()
+          [ -n "${RUNNER_URL:-}" ] || missing+=("RUNNER_URL")
+          [ -n "${RUNNER_HMAC_SECRET:-}" ] || missing+=("RUNNER_HMAC_SECRET")
+          [ -n "${GH_TOKEN:-}" ] || missing+=("RUNNER_GH_PAT")
+          if [ "${#missing[@]}" -gt 0 ]; then
+            echo "::error::missing required secret(s): ${missing[*]}"
+            exit 1
           fi
 
           TS="$(date +%s)"
