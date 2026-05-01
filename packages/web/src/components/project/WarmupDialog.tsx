@@ -16,7 +16,11 @@ import {
   useCreateProjectWarmup,
   useProjectWarmup,
 } from "@/hooks/useProjectWarmup";
-import type { ProjectWarmupSession, ProjectWarmupSupport } from "@/lib/api";
+import type {
+  CreateProjectWarmupResponse,
+  ProjectWarmupSession,
+  ProjectWarmupSupport,
+} from "@/lib/api";
 import type { Project } from "@aif/shared/browser";
 
 const MIN_TTL_SECONDS = 60;
@@ -70,6 +74,15 @@ function statusBadge(warmup: ProjectWarmupSession | null | undefined, enabled: b
   if (warmup.status === "failed") return { label: "FAILED", variant: "destructive" as const };
   if (warmup.status === "ready") return { label: "READY", variant: "default" as const };
   return { label: warmup.status.toUpperCase(), variant: "outline" as const };
+}
+
+function partialWarmupMessage(response: CreateProjectWarmupResponse): string | null {
+  if (!("partial" in response) || response.partial !== true) return null;
+  const target = response.failedTarget ? `${formatWorkflow(response.failedTarget)} failed` : null;
+  const reason = response.error || response.code || "one target failed";
+  return target
+    ? `Warmup partially created: ${target} - ${reason}`
+    : `Warmup partially created: ${reason}`;
 }
 
 export function WarmupDialog({ open, onOpenChange, project, enabled }: WarmupDialogProps) {
@@ -146,8 +159,13 @@ export function WarmupDialog({ open, onOpenChange, project, enabled }: WarmupDia
   async function handleCreate() {
     if (!projectId || !ttlValid) return;
     try {
-      await createWarmup.mutateAsync({ ttlSeconds: ttlValue });
+      const response = await createWarmup.mutateAsync({ ttlSeconds: ttlValue });
       setTtlTouched(false);
+      const partialMessage = partialWarmupMessage(response);
+      if (partialMessage) {
+        toast(partialMessage, "warning", 8000);
+        return;
+      }
       toast(warmup ? "Warmup regenerated" : "Warmup created", "success");
     } catch (error) {
       toast(error instanceof Error ? error.message : "Failed to create warmup", "error", 8000);

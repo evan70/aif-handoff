@@ -125,6 +125,29 @@ describe("WarmupDialog", () => {
     );
   });
 
+  it("shows a warning instead of success when warmup creation is partial", async () => {
+    mockGetProjectWarmup.mockResolvedValue(makeWarmupResponse());
+    mockCreateProjectWarmup.mockResolvedValue({
+      ...makeWarmupResponse(),
+      partial: true,
+      code: "partial_warmup_failed",
+      error: "codex warmup failed",
+      failedTarget: "implementer",
+    });
+
+    renderDialog();
+
+    const createButton = await screen.findByRole("button", { name: /Create/ });
+    await waitFor(() => expect(createButton).toBeEnabled());
+    fireEvent.click(createButton);
+
+    await waitFor(() => expect(mockCreateProjectWarmup).toHaveBeenCalled());
+    expect(
+      await screen.findByText("Warmup partially created: implementer failed - codex warmup failed"),
+    ).toBeDefined();
+    expect(screen.queryByText("Warmup created")).toBeNull();
+  });
+
   it("clears an active warmup session", async () => {
     mockGetProjectWarmup.mockResolvedValue(
       makeWarmupResponse({

@@ -151,6 +151,20 @@ export interface ProjectWarmupResponse {
   warmups?: ProjectWarmupSession[];
 }
 
+export interface PartialProjectWarmupResponse {
+  enabled?: boolean;
+  support: ProjectWarmupSupport;
+  targets?: ProjectWarmupSupport[];
+  warmup: ProjectWarmupSession | null;
+  warmups?: ProjectWarmupSession[];
+  partial: true;
+  code: string;
+  error: string;
+  failedTarget?: string | null;
+}
+
+export type CreateProjectWarmupResponse = ProjectWarmupResponse | PartialProjectWarmupResponse;
+
 export interface ClearProjectWarmupResponse {
   success: boolean;
   cleared: number;
@@ -316,8 +330,11 @@ export const api = {
     return request<ProjectWarmupResponse>(`/projects/${id}/warmup`);
   },
 
-  createProjectWarmup(id: string, input: { ttlSeconds?: number }): Promise<ProjectWarmupResponse> {
-    return request<ProjectWarmupResponse>(
+  createProjectWarmup(
+    id: string,
+    input: { ttlSeconds?: number },
+  ): Promise<CreateProjectWarmupResponse> {
+    return request<CreateProjectWarmupResponse>(
       `/projects/${id}/warmup`,
       {
         method: "POST",
