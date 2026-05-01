@@ -3,6 +3,7 @@
   "globalPassThroughEnv": [
     "AIF_RUNTIME_SESSION_FORK_ENABLED",
     "AIF_USAGE_LIMITS_ENABLED",
+    "AIF_WARMUP_ENABLED",
     "AIF_ENABLE_CODEX_LOGIN_PROXY",
     "AIF_RUNTIME_MODULES",
     "AIF_DEFAULT_RUNTIME_ID",
@@ -40,6 +41,10 @@
       "outputs": ["dist/**"]
     },
     "dev": {
+      "cache": false,
+      "persistent": true
+    },
+    "dev:perf": {
       "cache": false,
       "persistent": true
     },

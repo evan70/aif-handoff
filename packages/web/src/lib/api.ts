@@ -98,6 +98,7 @@ export interface SettingsResponse {
   maxReviewIterations: number;
   autoReviewStrategy: "full_re_review" | "closure_first";
   usageLimitsEnabled: boolean;
+  warmupEnabled: boolean;
   runtimeReadiness: {
     availableRuntimeCount: number;
     runtimeProfileCount: number;
@@ -109,6 +110,64 @@ export interface SettingsResponse {
     codexCliPathConfigured: boolean;
     app: AppRuntimeDefaultsResponse;
   };
+}
+
+export interface ProjectWarmupSupport {
+  supported: boolean;
+  skipReason: string | null;
+  workflowKind?: string;
+  profileMode?: string;
+  runtimeId: string | null;
+  providerId: string | null;
+  runtimeProfileId: string | null;
+  transport: string | null;
+  model: string | null;
+  selectionSource: string | null;
+}
+
+export interface ProjectWarmupSession {
+  id: string;
+  projectId: string;
+  runtimeProfileId: string | null;
+  runtimeId: string;
+  providerId: string;
+  transport: string | null;
+  model: string | null;
+  status: "creating" | "ready" | "failed" | "cleared" | "expired";
+  ttlSeconds: number;
+  expiresAt: string;
+  remainingSeconds: number;
+  summary: string | null;
+  errorMessage: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ProjectWarmupResponse {
+  enabled: boolean;
+  support: ProjectWarmupSupport;
+  targets?: ProjectWarmupSupport[];
+  warmup: ProjectWarmupSession | null;
+  warmups?: ProjectWarmupSession[];
+}
+
+export interface PartialProjectWarmupResponse {
+  enabled?: boolean;
+  support: ProjectWarmupSupport;
+  targets?: ProjectWarmupSupport[];
+  warmup: ProjectWarmupSession | null;
+  warmups?: ProjectWarmupSession[];
+  partial: true;
+  code: string;
+  error: string;
+  failedTarget?: string | null;
+}
+
+export type CreateProjectWarmupResponse = ProjectWarmupResponse | PartialProjectWarmupResponse;
+
+export interface ClearProjectWarmupResponse {
+  success: boolean;
+  cleared: number;
 }
 
 export interface SendChatMessageResponse {
@@ -265,6 +324,28 @@ export const api = {
   getProjectMcp(id: string): Promise<{ mcpServers: Record<string, unknown> }> {
     console.debug("[api] GET /projects/%s/mcp", id);
     return request(`/projects/${id}/mcp`);
+  },
+
+  getProjectWarmup(id: string): Promise<ProjectWarmupResponse> {
+    return request<ProjectWarmupResponse>(`/projects/${id}/warmup`);
+  },
+
+  createProjectWarmup(
+    id: string,
+    input: { ttlSeconds?: number },
+  ): Promise<CreateProjectWarmupResponse> {
+    return request<CreateProjectWarmupResponse>(
+      `/projects/${id}/warmup`,
+      {
+        method: "POST",
+        body: JSON.stringify(input),
+      },
+      PLAN_FAST_FIX_TIMEOUT_MS,
+    );
+  },
+
+  clearProjectWarmup(id: string): Promise<ClearProjectWarmupResponse> {
+    return request<ClearProjectWarmupResponse>(`/projects/${id}/warmup`, { method: "DELETE" });
   },
 
   // Tasks
