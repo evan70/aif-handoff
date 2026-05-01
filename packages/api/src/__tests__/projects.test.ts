@@ -1061,7 +1061,7 @@ describe("projects API", () => {
           sourceSessionId: "seed-old",
           status: "ready",
           ttlSeconds: 600,
-          expiresAt: "2026-05-01T12:00:00.000Z",
+          expiresAt: new Date(Date.now() + 600_000).toISOString(),
           summary: "Old warmup",
           errorMessage: null,
           createdAt: "2026-05-01T11:00:00.000Z",
