@@ -260,7 +260,7 @@ async function runCodexAppServerAttempt(
         experimentalApi: experimentalApiEnabled,
         sendsExperimentalHistoryFields: experimentalApiEnabled,
       },
-      "DEBUG [runtime:codex] [FIX:app-server-experimental-history] Prepared thread payload capability gates",
+      "DEBUG [runtime:codex] Prepared thread payload capability gates",
     );
 
     if (forkSourceSessionId) {

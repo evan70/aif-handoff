@@ -1,10 +1,16 @@
-import { describe, expect, it, vi } from "vitest";
+import { resetEnvCache } from "@aif/shared";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { bootstrapRuntimeRegistry } from "../bootstrap.js";
 import { UsageReporting } from "../types.js";
 
 const VALID_USAGE_REPORTING = new Set<string>(Object.values(UsageReporting));
 
 describe("bootstrapRuntimeRegistry", () => {
+  beforeEach(() => {
+    delete process.env.AIF_RUNTIME_SESSION_FORK_ENABLED;
+    resetEnvCache();
+  });
+
   it("creates registry with built-in claude, codex, opencode, and openrouter adapters", async () => {
     const registry = await bootstrapRuntimeRegistry();
     const runtimes = registry.listRuntimes();
@@ -21,10 +27,22 @@ describe("bootstrapRuntimeRegistry", () => {
     const claude = registry.resolveRuntime("claude");
 
     expect(claude.descriptor.capabilities.supportsResume).toBe(true);
-    expect(claude.descriptor.capabilities.supportsSessionFork).toBe(true);
+    expect(claude.descriptor.capabilities.supportsSessionFork).toBe(false);
     expect(claude.descriptor.capabilities.supportsSessionList).toBe(true);
     expect(claude.descriptor.capabilities.supportsAgentDefinitions).toBe(true);
     expect(claude.descriptor.lightModel).toBe("haiku");
+  });
+
+  it("exposes session fork capabilities only when the rollout flag is enabled", async () => {
+    process.env.AIF_RUNTIME_SESSION_FORK_ENABLED = "true";
+    resetEnvCache();
+    const registry = await bootstrapRuntimeRegistry();
+    const claude = registry.resolveRuntime("claude");
+    const codex = registry.resolveRuntime("codex");
+
+    expect(claude.descriptor.capabilities.supportsSessionFork).toBe(true);
+    expect(claude.getEffectiveCapabilities!("cli").supportsSessionFork).toBe(true);
+    expect(codex.getEffectiveCapabilities!("app-server").supportsSessionFork).toBe(true);
   });
 
   it("codex adapter has expected capabilities", async () => {

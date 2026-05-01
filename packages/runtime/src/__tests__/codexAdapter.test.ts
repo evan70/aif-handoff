@@ -1,3 +1,4 @@
+import { resetEnvCache } from "@aif/shared";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { TEST_USAGE_CONTEXT } from "./helpers/usageContext.js";
 
@@ -84,6 +85,8 @@ function createRunInput(overrides: Record<string, unknown> = {}) {
 
 describe("Codex runtime adapter", () => {
   beforeEach(() => {
+    delete process.env.AIF_RUNTIME_SESSION_FORK_ENABLED;
+    resetEnvCache();
     runCodexCliMock.mockReset();
     runCodexAgentApiMock.mockReset();
     runCodexSdkMock.mockReset();
@@ -142,7 +145,18 @@ describe("Codex runtime adapter", () => {
     expect(adapter.descriptor.supportedTransports).toContain("app-server");
   });
 
-  it("reports session fork support only for app-server transport", () => {
+  it("keeps session fork support disabled until the rollout flag is enabled", () => {
+    const adapter = createCodexRuntimeAdapter();
+
+    expect(adapter.getEffectiveCapabilities!("cli").supportsSessionFork).toBe(false);
+    expect(adapter.getEffectiveCapabilities!("sdk").supportsSessionFork).toBe(false);
+    expect(adapter.getEffectiveCapabilities!("api").supportsSessionFork).toBe(false);
+    expect(adapter.getEffectiveCapabilities!("app-server").supportsSessionFork).toBe(false);
+  });
+
+  it("reports session fork support for app-server transport when the rollout flag is enabled", () => {
+    process.env.AIF_RUNTIME_SESSION_FORK_ENABLED = "true";
+    resetEnvCache();
     const adapter = createCodexRuntimeAdapter();
 
     expect(adapter.getEffectiveCapabilities!("cli").supportsSessionFork).toBe(false);

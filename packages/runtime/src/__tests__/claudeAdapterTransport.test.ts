@@ -1,3 +1,4 @@
+import { resetEnvCache } from "@aif/shared";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { RuntimeTransport } from "../types.js";
 import { TEST_USAGE_CONTEXT } from "./helpers/usageContext.js";
@@ -42,6 +43,8 @@ function createRunInput(overrides: Record<string, unknown> = {}) {
 
 describe("Claude adapter — transport routing and capabilities", () => {
   beforeEach(() => {
+    delete process.env.AIF_RUNTIME_SESSION_FORK_ENABLED;
+    resetEnvCache();
     vi.clearAllMocks();
     runClaudeRuntimeMock.mockResolvedValue({ outputText: "sdk-output", sessionId: "sess-1" });
     runClaudeCliMock.mockResolvedValue({ outputText: "cli-output", sessionId: "sess-2" });
@@ -88,7 +91,7 @@ describe("Claude adapter — transport routing and capabilities", () => {
       const caps = adapter.getEffectiveCapabilities!(RuntimeTransport.SDK);
 
       expect(caps.supportsResume).toBe(true);
-      expect(caps.supportsSessionFork).toBe(true);
+      expect(caps.supportsSessionFork).toBe(false);
       expect(caps.supportsSessionList).toBe(true);
       expect(caps.supportsAgentDefinitions).toBe(true);
       expect(caps.supportsStreaming).toBe(true);
@@ -101,9 +104,26 @@ describe("Claude adapter — transport routing and capabilities", () => {
 
       expect(caps.supportsAgentDefinitions).toBe(true);
       expect(caps.supportsResume).toBe(true);
-      expect(caps.supportsSessionFork).toBe(true);
+      expect(caps.supportsSessionFork).toBe(false);
       expect(caps.supportsStreaming).toBe(false);
       expect(caps.supportsApprovals).toBe(false);
+    });
+
+    it("enables fork capabilities when the rollout flag is enabled", () => {
+      process.env.AIF_RUNTIME_SESSION_FORK_ENABLED = "true";
+      resetEnvCache();
+      const adapter = createClaudeRuntimeAdapter();
+
+      expect(adapter.descriptor.capabilities.supportsSessionFork).toBe(true);
+      expect(adapter.getEffectiveCapabilities!(RuntimeTransport.SDK).supportsSessionFork).toBe(
+        true,
+      );
+      expect(adapter.getEffectiveCapabilities!(RuntimeTransport.CLI).supportsSessionFork).toBe(
+        true,
+      );
+      expect(adapter.getEffectiveCapabilities!(RuntimeTransport.API).supportsSessionFork).toBe(
+        false,
+      );
     });
 
     it("returns API capabilities — no agent defs, no sessions", () => {

@@ -603,11 +603,18 @@ describe("Language directive injection", () => {
 
   function createCapturingAdapter(): {
     adapter: RuntimeAdapter;
-    captured: { run: string | undefined; resume: string | undefined };
+    captured: {
+      run: string | undefined;
+      resume: string | undefined;
+      fork: string | undefined;
+      forkPrompt: string | undefined;
+    };
   } {
     const captured = {
       run: undefined as string | undefined,
       resume: undefined as string | undefined,
+      fork: undefined as string | undefined,
+      forkPrompt: undefined as string | undefined,
     };
     const adapter: RuntimeAdapter = {
       descriptor: {
@@ -623,6 +630,15 @@ describe("Language directive injection", () => {
       async resume(input) {
         captured.resume = input.execution?.systemPromptAppend;
         return { outputText: "ok", usage: null };
+      },
+      async forkSession(input) {
+        captured.fork = input.execution?.systemPromptAppend;
+        captured.forkPrompt = input.prompt;
+        return {
+          outputText: "forked",
+          sessionId: "child-session",
+          usage: { inputTokens: 4, outputTokens: 5, totalTokens: 9, costUsd: 0.001 },
+        };
       },
     };
     return { adapter, captured };
@@ -701,6 +717,46 @@ describe("Language directive injection", () => {
     expect(captured.resume).toBeDefined();
     expect(captured.resume).toContain("Russian");
     expect(captured.resume).toMatch(/^S\n\n/);
+  });
+
+  it("applies prompt and language transforms and records usage on forkSession()", async () => {
+    const root = await setupTempProject("language:\n  artifacts: ru\n");
+    const events: RuntimeUsageEvent[] = [];
+    const { adapter, captured } = createCapturingAdapter();
+    adapter.descriptor.skillCommandPrefix = "$";
+    adapter.descriptor.capabilities = {
+      ...adapter.descriptor.capabilities,
+      supportsSessionFork: true,
+      usageReporting: UsageReporting.FULL,
+    };
+    const registry = createRuntimeRegistry({
+      usageSink: {
+        record(event) {
+          events.push(event);
+        },
+      },
+      builtInAdapters: [adapter],
+    });
+    const wrapped = registry.resolveRuntime("capture");
+
+    await wrapped.forkSession!({
+      ...buildRunInput(root, "S"),
+      prompt: "/aif-implement @PLAN.md",
+      sourceSessionId: "source-session",
+    });
+
+    expect(captured.forkPrompt).toBe("$aif-implement @PLAN.md");
+    expect(captured.fork).toBeDefined();
+    expect(captured.fork).toContain("Russian");
+    expect(captured.fork).toMatch(/^S\n\n/);
+    expect(events).toHaveLength(1);
+    expect(events[0].context.source).toBe(UsageSource.TEST);
+    expect(events[0].usage).toEqual({
+      inputTokens: 4,
+      outputTokens: 5,
+      totalTokens: 9,
+      costUsd: 0.001,
+    });
   });
 
   it("does not throw and logs WARN when config read fails", async () => {

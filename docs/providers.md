@@ -464,7 +464,7 @@ Runtime descriptors declare capability flags:
 - `supportsApprovals`
 - `supportsCustomEndpoint`
 
-`supportsSessionFork` gates adapters that can create a child session from a reusable source session. Warmup flows use this capability and must call the optional `forkSession()` method instead of resuming the source session directly.
+`supportsSessionFork` gates adapters that can create a child session from a reusable source session. Warmup flows use this capability and must call the optional `forkSession()` method instead of resuming the source session directly. The capability is also behind the off-by-default `AIF_RUNTIME_SESSION_FORK_ENABLED=false` rollout flag; fork-capable transports expose `supportsSessionFork=true` only when that flag is enabled.
 
 Additionally, `RuntimeExecutionIntent` supports `outputSchema` for structured JSON output (passed to adapters that support it, e.g. Codex SDK).
 

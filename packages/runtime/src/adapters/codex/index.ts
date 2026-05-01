@@ -1,4 +1,5 @@
 import { existsSync } from "node:fs";
+import { getEnv } from "@aif/shared";
 import { getCodexMcpStatus, installCodexMcpServer, uninstallCodexMcpServer } from "./mcp.js";
 import { initCodexProject } from "./project.js";
 import {
@@ -157,6 +158,13 @@ const APP_SERVER_CAPABILITIES: RuntimeCapabilities = {
   supportsCustomEndpoint: true,
   usageReporting: UsageReporting.PARTIAL,
 };
+
+function withSessionForkRolloutGate(capabilities: RuntimeCapabilities): RuntimeCapabilities {
+  if (getEnv().AIF_RUNTIME_SESSION_FORK_ENABLED || !capabilities.supportsSessionFork) {
+    return capabilities;
+  }
+  return { ...capabilities, supportsSessionFork: false };
+}
 
 function resolveTransport(input: {
   transport?: string;
@@ -557,7 +565,7 @@ export function createCodexRuntimeAdapter(
         case RuntimeTransport.SDK:
           return SDK_CAPABILITIES;
         case RuntimeTransport.APP_SERVER:
-          return APP_SERVER_CAPABILITIES;
+          return withSessionForkRolloutGate(APP_SERVER_CAPABILITIES);
         case RuntimeTransport.API:
           return API_CAPABILITIES;
         default:

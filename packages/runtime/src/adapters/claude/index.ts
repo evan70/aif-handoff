@@ -1,4 +1,5 @@
 import { query } from "@anthropic-ai/claude-agent-sdk";
+import { getEnv } from "@aif/shared";
 import { findClaudePath, resolveClaudeSdkExecutablePath } from "./findPath.js";
 import {
   RuntimeTransport,
@@ -140,6 +141,13 @@ const API_CAPABILITIES: RuntimeCapabilities = {
   supportsCustomEndpoint: true,
   usageReporting: UsageReporting.FULL,
 };
+
+function withSessionForkRolloutGate(capabilities: RuntimeCapabilities): RuntimeCapabilities {
+  if (getEnv().AIF_RUNTIME_SESSION_FORK_ENABLED || !capabilities.supportsSessionFork) {
+    return capabilities;
+  }
+  return { ...capabilities, supportsSessionFork: false };
+}
 
 function readStringOption(input: RuntimeConnectionValidationInput, key: string): string | null {
   const options = input.options ?? {};
@@ -576,16 +584,16 @@ export function createClaudeRuntimeAdapter(
       defaultModelPlaceholder: "opus",
       defaultTransport: RuntimeTransport.SDK,
       supportedTransports: [RuntimeTransport.SDK, RuntimeTransport.CLI, RuntimeTransport.API],
-      capabilities: SDK_CAPABILITIES,
+      capabilities: withSessionForkRolloutGate(SDK_CAPABILITIES),
     },
     getEffectiveCapabilities(transport: RuntimeTransport): RuntimeCapabilities {
       switch (transport) {
         case RuntimeTransport.CLI:
-          return CLI_CAPABILITIES;
+          return withSessionForkRolloutGate(CLI_CAPABILITIES);
         case RuntimeTransport.API:
           return API_CAPABILITIES;
         default:
-          return SDK_CAPABILITIES;
+          return withSessionForkRolloutGate(SDK_CAPABILITIES);
       }
     },
     async run(input: RuntimeRunInput): Promise<RuntimeRunResult> {

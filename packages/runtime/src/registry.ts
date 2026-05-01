@@ -16,6 +16,7 @@ import {
   type RuntimeDescriptor,
   type RuntimeRunInput,
   type RuntimeRunResult,
+  type RuntimeSessionForkInput,
 } from "./types.js";
 import { createNoopUsageSink, type RuntimeUsageSink } from "./usageSink.js";
 
@@ -248,10 +249,23 @@ function wrapAdapter(
     return result;
   }
 
+  async function wrappedForkSession(input: RuntimeSessionForkInput): Promise<RuntimeRunResult> {
+    if (!adapter.forkSession) {
+      throw new RuntimeExecutionError(
+        `Runtime "${adapter.descriptor.id}" does not implement forkSession()`,
+      );
+    }
+    const transformed = applyLanguageDirective(transformPrompt(input)) as RuntimeSessionForkInput;
+    const result = await adapter.forkSession(transformed);
+    recordUsage(transformed, result);
+    return result;
+  }
+
   return {
     ...adapter,
     run: wrappedRun,
     resume: adapter.resume ? wrappedResume : undefined,
+    forkSession: adapter.forkSession ? wrappedForkSession : undefined,
   };
 }
 
