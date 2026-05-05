@@ -104,11 +104,7 @@ function isActiveOverageRejection(info: ClaudeRateLimitInfo): boolean {
 }
 
 function isOverageWindowRelevant(info: ClaudeRateLimitInfo): boolean {
-  return (
-    isActiveOverageRejection(info) ||
-    info.overageStatus === "allowed_warning" ||
-    info.isUsingOverage === true
-  );
+  return info.isUsingOverage === true;
 }
 
 function mapStatus(info: ClaudeRateLimitInfo): RuntimeLimitStatus {
@@ -118,14 +114,10 @@ function mapStatus(info: ClaudeRateLimitInfo): RuntimeLimitStatus {
   if (baseWindowRejected || overageWindowRejected) {
     return RuntimeLimitStatus.BLOCKED;
   }
-  if (
-    info.status === "allowed_warning" ||
-    info.overageStatus === "allowed_warning" ||
-    info.isUsingOverage === true
-  ) {
+  if (info.status === "allowed_warning" || info.isUsingOverage === true) {
     return RuntimeLimitStatus.WARNING;
   }
-  if (info.status === "allowed" || info.overageStatus === "allowed") {
+  if (info.status === "allowed") {
     return RuntimeLimitStatus.OK;
   }
   return RuntimeLimitStatus.UNKNOWN;
@@ -150,8 +142,9 @@ function resolvePrimaryRateLimitType(
   info: ClaudeRateLimitInfo,
   status: RuntimeLimitStatus,
 ): ClaudeRateLimitType | null {
-  const baseType = info.rateLimitType ?? null;
   const overageRelevant = isOverageWindowRelevant(info);
+  const baseType =
+    info.rateLimitType === "overage" && !overageRelevant ? null : (info.rateLimitType ?? null);
 
   if (status === RuntimeLimitStatus.BLOCKED) {
     return isActiveOverageRejection(info) ? "overage" : baseType;
@@ -190,8 +183,7 @@ export function normalizeClaudeLimitSnapshot(
     primaryRateLimitType === "overage"
       ? (normalizeTimestamp(info.overageResetsAt ?? null) ??
         normalizeTimestamp(info.resetsAt ?? null))
-      : (normalizeTimestamp(info.resetsAt ?? null) ??
-        normalizeTimestamp(info.overageResetsAt ?? null));
+      : normalizeTimestamp(info.resetsAt ?? null);
 
   const hasMeaningfulSignal =
     status !== RuntimeLimitStatus.UNKNOWN ||

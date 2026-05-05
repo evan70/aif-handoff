@@ -102,6 +102,39 @@ describe("normalizeClaudeLimitSnapshot", () => {
     });
   });
 
+  it("ignores informational overage rate limit types when overage is inactive", () => {
+    const snapshot = normalizeClaudeLimitSnapshot({
+      info: {
+        status: "allowed",
+        overageStatus: "rejected",
+        overageResetsAt: 1_800_000_000,
+        rateLimitType: "overage",
+        isUsingOverage: false,
+      },
+      runtimeId: "claude",
+      providerId: "anthropic",
+      profileId: "profile-1",
+      checkedAt: "2026-04-17T00:00:00.000Z",
+    });
+
+    expect(snapshot).toMatchObject({
+      status: RuntimeLimitStatus.OK,
+      primaryScope: RuntimeLimitScope.OTHER,
+      resetAt: null,
+      providerMeta: {
+        rateLimitType: null,
+        status: "allowed",
+        overageStatus: "rejected",
+        isUsingOverage: false,
+      },
+    });
+    expect(snapshot?.windows[0]).toMatchObject({
+      scope: RuntimeLimitScope.OTHER,
+      name: null,
+      resetAt: null,
+    });
+  });
+
   it("treats overage usage as a warning and preserves millisecond reset timestamps", () => {
     const snapshot = normalizeClaudeLimitSnapshot({
       info: {
