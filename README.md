@@ -49,6 +49,14 @@ npm run dev
 
 Set `MCP_PORT` in your shell or root `.env` before `npm run dev` if you also want the MCP HTTP server in local development. Use an integer port between `1` and `65535`; invalid values are ignored by the dev launcher and the settings install route falls back to the local `stdio` entry instead of writing an HTTP MCP endpoint.
 
+> **`ai-factory` is a required runtime dependency**, not an optional plugin. The agent uses
+> the `ai-factory` CLI to scaffold `.ai-factory/` inside every project you create through the
+> UI. It is declared in the root `package.json` and is installed automatically by `npm install`.
+> If you install with `npm ci --omit=dev` or `NODE_ENV=production npm install`, make sure
+> `ai-factory` ends up in `node_modules/` — otherwise the agent falls back to `npx ai-factory ...`
+> at task-run time, which requires network access to the npm registry. The agent logs a clear
+> warning at boot when the CLI is not resolvable.
+
 ### With Docker
 
 ```bash

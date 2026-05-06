@@ -47,9 +47,11 @@
   "lint-staged": {
     "*.{ts,tsx,js,jsx,json,md,css}": "prettier --write"
   },
+  "dependencies": {
+    "ai-factory": "^2.10.0"
+  },
   "devDependencies": {
     "@vitest/coverage-v8": "^4.1.2",
-    "ai-factory": "^2.10.0",
     "eslint": "^9.39.4",
     "eslint-plugin-react-hooks": "^7.0.1",
     "globals": "^17.4.0",
