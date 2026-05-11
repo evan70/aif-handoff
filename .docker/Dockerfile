@@ -12,6 +12,11 @@ ENV HTTP_PROXY=${HTTP_PROXY} \
     http_proxy=${HTTP_PROXY} \
     https_proxy=${HTTPS_PROXY} \
     no_proxy=${NO_PROXY}
+# Resilient apt wrapper — retries on transient mirror/CDN failures (Hash Sum
+# mismatch, sporadic 5xx). See script header for details. Available to all
+# Debian-based downstream stages (deps, build, api, agent, mcp).
+COPY .docker/apt-install.sh /usr/local/bin/apt-install
+RUN chmod +x /usr/local/bin/apt-install
 
 # ---- Dependencies ----
 FROM base AS deps
@@ -28,12 +33,10 @@ COPY packages/mcp/package.json packages/mcp/
 # releases slowness), npm falls back to `node-gyp rebuild`, which needs
 # python3 + build-essential — neither present in node:22-slim. Without those
 # the build fails with a misleading "Python is not set" error. Install the
-# build toolchain upfront, raise npm fetch retries, and clean the apt cache
-# in the same layer to keep image size down.
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends python3 build-essential ca-certificates \
-    && rm -rf /var/lib/apt/lists/* \
-    && npm config set fetch-retries 5 \
+# build toolchain upfront and raise npm fetch retries. apt-install handles
+# transient mirror failures and cleans /var/lib/apt/lists/* on exit.
+RUN apt-install python3 build-essential ca-certificates
+RUN npm config set fetch-retries 5 \
     && npm config set fetch-retry-mintimeout 20000 \
     && npm config set fetch-retry-maxtimeout 120000 \
     && npm ci --ignore-scripts \
@@ -47,7 +50,7 @@ RUN npx turbo build
 # ---- API ----
 FROM base AS api
 ENV NODE_ENV=production HOME=/home/node
-RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates gosu git && rm -rf /var/lib/apt/lists/* \
+RUN apt-install ca-certificates gosu git \
     && npm i -g @anthropic-ai/claude-code @openai/codex
 COPY --chown=node:node --from=deps /app/node_modules ./node_modules
 COPY --chown=node:node --from=build /app/packages/shared ./packages/shared
@@ -82,7 +85,7 @@ EXPOSE 80 443
 # ---- Agent ----
 FROM base AS agent
 ENV NODE_ENV=production HOME=/home/node
-RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates gosu git curl && rm -rf /var/lib/apt/lists/* \
+RUN apt-install ca-certificates gosu git curl \
     && npm i -g @anthropic-ai/claude-code @openai/codex
 COPY --chown=node:node --from=deps /app/node_modules ./node_modules
 COPY --chown=node:node --from=build /app/packages/shared ./packages/shared
@@ -99,7 +102,7 @@ CMD ["npx", "tsx", "packages/agent/src/index.ts"]
 # ---- MCP ----
 FROM base AS mcp
 ENV NODE_ENV=production HOME=/home/node
-RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates gosu && rm -rf /var/lib/apt/lists/*
+RUN apt-install ca-certificates gosu
 COPY --chown=node:node --from=deps /app/node_modules ./node_modules
 COPY --chown=node:node --from=build /app/packages/shared ./packages/shared
 COPY --chown=node:node --from=build /app/packages/data ./packages/data
