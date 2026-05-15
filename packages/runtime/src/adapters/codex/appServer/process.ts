@@ -1,6 +1,7 @@
 import { spawn, type ChildProcess, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { RuntimeTransport } from "../../../types.js";
 import { buildSafeWindowsShellCommandLine } from "../../../shellSafety.js";
+import { PROXY_ENV_VARS } from "../../../proxyEnv.js";
 
 const IS_WINDOWS = process.platform === "win32";
 
@@ -21,12 +22,7 @@ const ALLOWED_ENV_KEYS = new Set([
   "FORCE_COLOR",
   "NO_COLOR",
   "NODE_ENV",
-  "HTTP_PROXY",
-  "HTTPS_PROXY",
-  "NO_PROXY",
-  "http_proxy",
-  "https_proxy",
-  "no_proxy",
+  ...PROXY_ENV_VARS,
 ]);
 
 const ALLOWED_ENV_PREFIXES = ["OPENAI_", "CODEX_", "AIF_", "HANDOFF_", "LC_", "XDG_"];
@@ -139,6 +135,7 @@ export function buildCodexAppServerEnvWithStats(
   // losing one variant when a parent process forwarded only uppercase/lowercase.
   mirrorEnvPair(env, "HTTP_PROXY", "http_proxy");
   mirrorEnvPair(env, "HTTPS_PROXY", "https_proxy");
+  mirrorEnvPair(env, "ALL_PROXY", "all_proxy");
   mirrorEnvPair(env, "NO_PROXY", "no_proxy");
 
   return {

@@ -14,6 +14,7 @@ import type {
 import { RuntimeExecutionError, type RuntimeExecutionErrorMetadata } from "../../errors.js";
 import { buildRuntimeLimitEvent } from "../../limitEvents.js";
 import { buildOpenAiCompatibleLimitSnapshot } from "../../openaiRateLimits.js";
+import { withProxyDispatcher } from "../../proxyEnv.js";
 import { isRetriableTimeoutError, resolveRetryDelay, sleepMs } from "../../timeouts.js";
 import { classifyOpenRouterRuntimeError } from "./errors.js";
 
@@ -325,12 +326,15 @@ async function postChatCompletionsWith429Retry(
   signal?: AbortSignal,
 ): Promise<Response> {
   for (let attempt = 1; attempt <= MAX_429_ATTEMPTS; attempt += 1) {
-    const response = await fetch(url, {
-      method: "POST",
-      headers: buildHeaders(input),
-      body: JSON.stringify(buildRequestBody(input, stream)),
-      ...(signal ? { signal } : {}),
-    });
+    const response = await fetch(
+      url,
+      withProxyDispatcher(url, {
+        method: "POST",
+        headers: buildHeaders(input),
+        body: JSON.stringify(buildRequestBody(input, stream)),
+        ...(signal ? { signal } : {}),
+      }),
+    );
 
     const isRetryable = RETRYABLE_STATUS.has(response.status);
     const hasAttemptsLeft = attempt < MAX_429_ATTEMPTS;
@@ -660,10 +664,13 @@ export async function validateOpenRouterApiConnection(
   const url = `${baseUrl}/models`;
 
   try {
-    const response = await fetch(url, {
-      method: "GET",
-      headers: buildHeaders(input),
-    });
+    const response = await fetch(
+      url,
+      withProxyDispatcher(url, {
+        method: "GET",
+        headers: buildHeaders(input),
+      }),
+    );
     if (!response.ok) {
       return {
         ok: false,
@@ -691,10 +698,13 @@ export async function listOpenRouterApiModels(
   const url = `${baseUrl}/models`;
 
   try {
-    const response = await fetch(url, {
-      method: "GET",
-      headers: buildHeaders(inputWithOptions),
-    });
+    const response = await fetch(
+      url,
+      withProxyDispatcher(url, {
+        method: "GET",
+        headers: buildHeaders(inputWithOptions),
+      }),
+    );
     if (!response.ok) {
       const rawText = await response.text();
       return Promise.reject(

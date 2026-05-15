@@ -28,6 +28,7 @@ import {
   warnOnInvalidCodexPermissionOverride,
 } from "./permissions.js";
 import { getCodexSessionLimitSnapshot } from "./sessions.js";
+import { PROXY_ENV_VARS } from "../../proxyEnv.js";
 
 export interface CodexSdkLogger {
   debug?(context: Record<string, unknown>, message: string): void;
@@ -89,12 +90,7 @@ const ALLOWED_ENV_PREFIXES = [
   "XDG_",
   "FORCE_COLOR",
   "NO_COLOR",
-  "HTTP_PROXY",
-  "HTTPS_PROXY",
-  "NO_PROXY",
-  "http_proxy",
-  "https_proxy",
-  "no_proxy",
+  ...PROXY_ENV_VARS,
 ];
 
 function buildCuratedEnv(

@@ -70,6 +70,7 @@ describe("codex app-server process helpers", () => {
     vi.stubEnv("USER", "test-user");
     vi.stubEnv("PATH", "/usr/bin");
     vi.stubEnv("HTTP_PROXY", "http://proxy.example");
+    vi.stubEnv("ALL_PROXY", "socks5://proxy.example:1080");
 
     const env = buildCodexAppServerEnv({
       runtimeId: "codex",
@@ -89,6 +90,8 @@ describe("codex app-server process helpers", () => {
       PATH: "/usr/bin",
       HTTP_PROXY: "http://proxy.example",
       http_proxy: "http://proxy.example",
+      ALL_PROXY: "socks5://proxy.example:1080",
+      all_proxy: "socks5://proxy.example:1080",
     });
 
     vi.unstubAllEnvs();

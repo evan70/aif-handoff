@@ -69,6 +69,12 @@ The API exposes effective selection endpoints:
 
 Capabilities are **transport-aware**: the same adapter may expose different capabilities depending on the selected transport. For example, Codex supports resume on SDK/CLI/App Server, session fork only on App Server, and session discovery on SDK/App Server. Use `resolveAdapterCapabilities(adapter, transport)` to get the effective set.
 
+### Runtime Proxy Support
+
+All built-in runtime adapters understand `HTTP_PROXY`, `HTTPS_PROXY`, `ALL_PROXY`, and `NO_PROXY` plus lowercase variants. SDK/CLI/App Server transports receive these variables in their curated child-process environment. API transports use an undici dispatcher directly, so native Node `fetch` does not silently bypass the configured proxy.
+
+Use `ALL_PROXY=socks5://...` for SOCKS5 proxies, and keep `NO_PROXY` populated for local endpoints (`localhost,127.0.0.1,::1`) and Docker service names (`api,agent,web,mcp`).
+
 ### Runtime-limit observability
 
 Runtime-limit auto-pause depends on what each provider/transport can actually surface. The runtime layer normalizes these inputs into the shared `runtimeLimitSnapshot` contract and marks each snapshot as either `exact` or `heuristic`.

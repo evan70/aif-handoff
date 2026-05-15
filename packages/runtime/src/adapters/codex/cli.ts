@@ -18,6 +18,7 @@ import {
   type CodexApprovalPolicy,
   type CodexSandboxMode,
 } from "./permissions.js";
+import { PROXY_ENV_VARS } from "../../proxyEnv.js";
 
 const IS_WINDOWS = process.platform === "win32";
 
@@ -227,12 +228,7 @@ const ALLOWED_ENV_PREFIXES = [
   "XDG_",
   "FORCE_COLOR",
   "NO_COLOR",
-  "HTTP_PROXY",
-  "HTTPS_PROXY",
-  "NO_PROXY",
-  "http_proxy",
-  "https_proxy",
-  "no_proxy",
+  ...PROXY_ENV_VARS,
 ];
 
 /**

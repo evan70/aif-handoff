@@ -8,6 +8,17 @@ import {
 import { CodexRuntimeAdapterError } from "../adapters/codex/errors.js";
 import { TEST_USAGE_CONTEXT } from "./helpers/usageContext.js";
 
+function clearProxyEnv() {
+  vi.stubEnv("HTTP_PROXY", undefined);
+  vi.stubEnv("HTTPS_PROXY", undefined);
+  vi.stubEnv("ALL_PROXY", undefined);
+  vi.stubEnv("NO_PROXY", undefined);
+  vi.stubEnv("http_proxy", undefined);
+  vi.stubEnv("https_proxy", undefined);
+  vi.stubEnv("all_proxy", undefined);
+  vi.stubEnv("no_proxy", undefined);
+}
+
 function createRunInput(overrides: Record<string, unknown> = {}) {
   return {
     runtimeId: "codex",
@@ -38,6 +49,7 @@ describe("codex api transport (OpenAI Chat Completions)", () => {
     fetchMock.mockReset();
     vi.stubGlobal("fetch", fetchMock as unknown as typeof fetch);
     vi.unstubAllEnvs();
+    clearProxyEnv();
   });
 
   afterEach(() => {
@@ -167,6 +179,45 @@ describe("codex api transport (OpenAI Chat Completions)", () => {
 
     expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(result.outputText).toBe("recovered");
+  });
+
+  it("passes a proxy dispatcher to API requests when proxy env is set", async () => {
+    vi.stubEnv("ALL_PROXY", "socks5://proxy.example:1080");
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({
+        id: "chatcmpl-proxy",
+        choices: [{ message: { role: "assistant", content: "proxied" } }],
+      }),
+    );
+
+    await runCodexAgentApi(
+      createRunInput({
+        options: { baseUrl: "https://api.openai.com/v1", apiRetryCount: 0 },
+      }),
+    );
+
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit & { dispatcher?: unknown }];
+    expect(init.dispatcher).toBeDefined();
+  });
+
+  it("does not pass a proxy dispatcher for NO_PROXY matches", async () => {
+    vi.stubEnv("HTTPS_PROXY", "http://proxy.example:8080");
+    vi.stubEnv("NO_PROXY", "api.openai.com");
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({
+        id: "chatcmpl-direct",
+        choices: [{ message: { role: "assistant", content: "direct" } }],
+      }),
+    );
+
+    await runCodexAgentApi(
+      createRunInput({
+        options: { baseUrl: "https://api.openai.com/v1", apiRetryCount: 0 },
+      }),
+    );
+
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit & { dispatcher?: unknown }];
+    expect(init.dispatcher).toBeUndefined();
   });
 
   it("validates connection via /models endpoint", async () => {

@@ -8,6 +8,17 @@ import {
 import { OpenRouterRuntimeAdapterError } from "../adapters/openrouter/errors.js";
 import { TEST_USAGE_CONTEXT } from "./helpers/usageContext.js";
 
+function clearProxyEnv() {
+  vi.stubEnv("HTTP_PROXY", undefined);
+  vi.stubEnv("HTTPS_PROXY", undefined);
+  vi.stubEnv("ALL_PROXY", undefined);
+  vi.stubEnv("NO_PROXY", undefined);
+  vi.stubEnv("http_proxy", undefined);
+  vi.stubEnv("https_proxy", undefined);
+  vi.stubEnv("all_proxy", undefined);
+  vi.stubEnv("no_proxy", undefined);
+}
+
 function createRunInput(overrides: Record<string, unknown> = {}) {
   return {
     runtimeId: "openrouter",
@@ -51,6 +62,7 @@ describe("OpenRouter API transport", () => {
     fetchMock.mockReset();
     vi.stubGlobal("fetch", fetchMock as unknown as typeof fetch);
     vi.unstubAllEnvs();
+    clearProxyEnv();
   });
 
   afterEach(() => {
@@ -145,6 +157,16 @@ describe("OpenRouter API transport", () => {
 
       const [url] = fetchMock.mock.calls[0] as [string, RequestInit];
       expect(url).toBe("https://custom.proxy/v1/chat/completions");
+    });
+
+    it("passes a proxy dispatcher when proxy env is set", async () => {
+      vi.stubEnv("HTTPS_PROXY", "http://proxy.example:8080");
+      fetchMock.mockResolvedValueOnce(jsonResponse({ choices: [{ message: { content: "ok" } }] }));
+
+      await runOpenRouterApi(createRunInput({ options: { apiKey: "sk-test" } }));
+
+      const [, init] = fetchMock.mock.calls[0] as [string, RequestInit & { dispatcher?: unknown }];
+      expect(init.dispatcher).toBeDefined();
     });
 
     it("sets HTTP-Referer and X-Title headers", async () => {

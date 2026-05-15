@@ -536,6 +536,28 @@ describe("runCodexSdk", () => {
     expect(constructorOptions.env?.npm_config_registry).toBeUndefined();
   });
 
+  it("forwards proxy env vars into Codex SDK env", async () => {
+    vi.stubEnv("ALL_PROXY", "socks5://proxy.example:1080");
+    vi.stubEnv("NO_PROXY", "localhost,.internal");
+    mockRunStreamed.mockResolvedValue({
+      events: createMockEvents([
+        { type: "thread.started", thread_id: "thread-proxy-env" },
+        {
+          type: "turn.completed",
+          usage: { input_tokens: 0, output_tokens: 0, cached_input_tokens: 0 },
+        },
+      ]),
+    });
+
+    await runCodexSdk(createRunInput());
+
+    const constructorOptions = mockCodexConstructor.mock.calls[0][0] as {
+      env?: Record<string, string>;
+    };
+    expect(constructorOptions.env?.ALL_PROXY).toBe("socks5://proxy.example:1080");
+    expect(constructorOptions.env?.NO_PROXY).toBe("localhost,.internal");
+  });
+
   it("uses options.codexCliPath, CODEX_CLI_PATH, then installed codex for SDK runs", async () => {
     mockRunStreamed.mockResolvedValue({
       events: createMockEvents([
