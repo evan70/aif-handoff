@@ -10,7 +10,7 @@ const SUPPORTED_NODE_RANGE = "^20.19.0 || >=22.12.0";
 
 function assertNodeVersion() {
   const [major, minor] = process.versions.node.split(".").map(Number);
-  const ok = (major === 20 && minor >= 19) || (major > 22 || (major === 22 && minor >= 12));
+  const ok = (major === 20 && minor >= 19) || major > 22 || (major === 22 && minor >= 12);
   if (!ok) {
     console.error(
       `[dev] Node ${process.versions.node} is not supported. Requires Node ${SUPPORTED_NODE_RANGE} (Vite 8 dependency; Node 21 is not supported).\n` +
