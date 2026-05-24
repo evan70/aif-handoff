@@ -3,7 +3,15 @@
  * Extracted from notifier.ts for single responsibility.
  */
 
+import { WebSocket } from "ws";
+
 import { logger, getEnv } from "@aif/shared";
+
+// Use the `ws` package instead of the global `WebSocket`. The global
+// `WebSocket` only appeared in Node 21, but `engines.node` allows 20.19+.
+// On Node 20.x this previously produced a continuous log spam of
+// `ReferenceError: WebSocket is not defined` plus a tight-loop reconnect,
+// flooding stdout and masking real agent errors.
 
 const log = logger("wake-channel");
 

@@ -22,68 +22,66 @@ import {
   _resetForTesting,
 } from "../wakeChannel.js";
 
-// ---------------------------------------------------------------------------
-// Mock WebSocket
-// ---------------------------------------------------------------------------
-type WsListener = (...args: unknown[]) => void;
+const wsMockState = vi.hoisted(() => ({
+  lastCreatedWs: null as null | {
+    _simulateOpen(): void;
+    _simulateClose(): void;
+    _simulateMessage(data: string): void;
+  },
+  MockWebSocket: class MockWebSocket {
+    static OPEN = 1;
+    static CONNECTING = 0;
+    static CLOSED = 3;
 
-class MockWebSocket {
-  static OPEN = 1;
-  static CONNECTING = 0;
-  static CLOSED = 3;
+    readyState = MockWebSocket.CONNECTING;
+    private listeners: Record<string, Array<(...args: unknown[]) => void>> = {};
 
-  readyState = MockWebSocket.CONNECTING;
-  private listeners: Record<string, WsListener[]> = {};
+    addEventListener(event: string, fn: (...args: unknown[]) => void): void {
+      (this.listeners[event] ??= []).push(fn);
+    }
 
-  addEventListener(event: string, fn: WsListener): void {
-    (this.listeners[event] ??= []).push(fn);
-  }
+    removeEventListener(event: string, fn: (...args: unknown[]) => void): void {
+      const list = this.listeners[event];
+      if (!list) return;
+      this.listeners[event] = list.filter((f) => f !== fn);
+    }
 
-  removeEventListener(event: string, fn: WsListener): void {
-    const list = this.listeners[event];
-    if (!list) return;
-    this.listeners[event] = list.filter((f) => f !== fn);
-  }
+    close(): void {
+      this.readyState = MockWebSocket.CLOSED;
+    }
 
-  close(): void {
-    this.readyState = MockWebSocket.CLOSED;
-  }
+    _emit(event: string, data?: unknown): void {
+      for (const fn of this.listeners[event] ?? []) fn(data);
+    }
 
-  // Test helpers
-  _emit(event: string, data?: unknown): void {
-    for (const fn of this.listeners[event] ?? []) fn(data);
-  }
+    _simulateOpen(): void {
+      this.readyState = MockWebSocket.OPEN;
+      this._emit("open");
+    }
 
-  _simulateOpen(): void {
-    this.readyState = MockWebSocket.OPEN;
-    this._emit("open");
-  }
+    _simulateClose(): void {
+      this.readyState = MockWebSocket.CLOSED;
+      this._emit("close");
+    }
 
-  _simulateClose(): void {
-    this.readyState = MockWebSocket.CLOSED;
-    this._emit("close");
-  }
-
-  _simulateMessage(data: string): void {
-    this._emit("message", { data });
-  }
-}
-
-let lastCreatedWs: MockWebSocket | null = null;
-
-function setLastCreatedWs(ws: MockWebSocket): void {
-  lastCreatedWs = ws;
-}
-
-vi.stubGlobal(
-  "WebSocket",
-  class extends MockWebSocket {
-    constructor() {
-      super();
-      setLastCreatedWs(this); // eslint-friendly: no this-alias
+    _simulateMessage(data: string): void {
+      this._emit("message", { data });
     }
   },
-);
+}));
+
+vi.mock("ws", () => ({
+  WebSocket: class extends wsMockState.MockWebSocket {
+    static OPEN = wsMockState.MockWebSocket.OPEN;
+    static CONNECTING = wsMockState.MockWebSocket.CONNECTING;
+    static CLOSED = wsMockState.MockWebSocket.CLOSED;
+
+    constructor() {
+      super();
+      wsMockState.lastCreatedWs = this;
+    }
+  },
+}));
 
 // ---------------------------------------------------------------------------
 // Mock fetch for waitForApiReady
@@ -94,7 +92,7 @@ vi.stubGlobal("fetch", fetchMock);
 beforeEach(() => {
   vi.useFakeTimers();
   _resetForTesting();
-  lastCreatedWs = null;
+  wsMockState.lastCreatedWs = null;
   fetchMock.mockReset();
 });
 
@@ -113,13 +111,13 @@ describe("wakeChannel", () => {
       const result = connectWakeChannel(callback);
 
       expect(result).toBe(true);
-      expect(lastCreatedWs).not.toBeNull();
+      expect(wsMockState.lastCreatedWs).not.toBeNull();
     });
 
     it("resets reconnect attempts on successful open", () => {
       const callback = vi.fn();
       connectWakeChannel(callback);
-      lastCreatedWs!._simulateOpen();
+      wsMockState.lastCreatedWs!._simulateOpen();
 
       expect(isWakeChannelConnected()).toBe(true);
     });
@@ -127,19 +125,19 @@ describe("wakeChannel", () => {
     it("invokes callback on wake events", () => {
       const callback = vi.fn();
       connectWakeChannel(callback);
-      lastCreatedWs!._simulateOpen();
+      wsMockState.lastCreatedWs!._simulateOpen();
 
-      lastCreatedWs!._simulateMessage(JSON.stringify({ type: "task:created" }));
+      wsMockState.lastCreatedWs!._simulateMessage(JSON.stringify({ type: "task:created" }));
       expect(callback).toHaveBeenCalledWith("task:created");
     });
 
     it("debounces rapid wake events", () => {
       const callback = vi.fn();
       connectWakeChannel(callback);
-      lastCreatedWs!._simulateOpen();
+      wsMockState.lastCreatedWs!._simulateOpen();
 
-      lastCreatedWs!._simulateMessage(JSON.stringify({ type: "task:created" }));
-      lastCreatedWs!._simulateMessage(JSON.stringify({ type: "task:moved" }));
+      wsMockState.lastCreatedWs!._simulateMessage(JSON.stringify({ type: "task:created" }));
+      wsMockState.lastCreatedWs!._simulateMessage(JSON.stringify({ type: "task:moved" }));
 
       expect(callback).toHaveBeenCalledTimes(1);
     });
@@ -147,18 +145,18 @@ describe("wakeChannel", () => {
     it("ignores non-wake events", () => {
       const callback = vi.fn();
       connectWakeChannel(callback);
-      lastCreatedWs!._simulateOpen();
+      wsMockState.lastCreatedWs!._simulateOpen();
 
-      lastCreatedWs!._simulateMessage(JSON.stringify({ type: "heartbeat" }));
+      wsMockState.lastCreatedWs!._simulateMessage(JSON.stringify({ type: "heartbeat" }));
       expect(callback).not.toHaveBeenCalled();
     });
 
     it("ignores malformed messages", () => {
       const callback = vi.fn();
       connectWakeChannel(callback);
-      lastCreatedWs!._simulateOpen();
+      wsMockState.lastCreatedWs!._simulateOpen();
 
-      lastCreatedWs!._simulateMessage("not json");
+      wsMockState.lastCreatedWs!._simulateMessage("not json");
       expect(callback).not.toHaveBeenCalled();
     });
   });
@@ -167,25 +165,25 @@ describe("wakeChannel", () => {
     it("reconnects on close with exponential backoff", () => {
       const callback = vi.fn();
       connectWakeChannel(callback);
-      const ws1 = lastCreatedWs!;
+      const ws1 = wsMockState.lastCreatedWs!;
       ws1._simulateClose();
 
       // First reconnect: ~1s base
       vi.advanceTimersByTime(1500);
-      expect(lastCreatedWs).not.toBe(ws1);
+      expect(wsMockState.lastCreatedWs).not.toBe(ws1);
     });
 
     it("does not reconnect after closeWakeChannel()", () => {
       const callback = vi.fn();
       connectWakeChannel(callback);
-      const ws1 = lastCreatedWs!;
+      const ws1 = wsMockState.lastCreatedWs!;
 
       closeWakeChannel();
       ws1._simulateClose();
 
       vi.advanceTimersByTime(60000);
       // No new WS created after close
-      expect(lastCreatedWs).toBe(ws1);
+      expect(wsMockState.lastCreatedWs).toBe(ws1);
     });
   });
 

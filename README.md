@@ -42,10 +42,19 @@ Need something custom? Add your own runtime adapter module and load it at startu
 ```bash
 git clone https://github.com/lee-to/aif-handoff.git
 cd aif-handoff
+nvm use            # pick Node version from .nvmrc (requires Node 20.19+ or 22.12+)
+cp .env.example .env
 npm install
 npm run init
 npm run dev
 ```
+
+> **If you switch Node between runs** (for example via `nvm use`), run
+> `npm rebuild better-sqlite3` after the switch. The native binary is bound
+> to `NODE_MODULE_VERSION`, and without a rebuild the API will crash with
+> `ERR_DLOPEN_FAILED`, which surfaces as a **502 Bad Gateway** in the Vite
+> UI. From this version onward, `npm run dev` detects this case at startup
+> and prints the exact rebuild command.
 
 Set `MCP_PORT` in your shell or root `.env` before `npm run dev` if you also want the MCP HTTP server in local development. Use an integer port between `1` and `65535`; invalid values are ignored by the dev launcher and the settings install route falls back to the local `stdio` entry instead of writing an HTTP MCP endpoint.
 

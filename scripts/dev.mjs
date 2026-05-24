@@ -1,9 +1,51 @@
 import { existsSync, readFileSync } from "node:fs";
+import { createRequire } from "node:module";
 import { resolve } from "node:path";
 import { spawnDev } from "./lib/spawn-dev.mjs";
 import { assertWorkspacePackagesResolveToSource } from "./lib/workspace-resolution-guard.mjs";
 
+// Minimum Node version required transitively (Vite 8). Keep in sync with
+// `engines.node` in the root package.json.
+const SUPPORTED_NODE_RANGE = "^20.19.0 || >=22.12.0";
+
+function assertNodeVersion() {
+  const [major, minor] = process.versions.node.split(".").map(Number);
+  const ok = (major === 20 && minor >= 19) || major > 22 || (major === 22 && minor >= 12);
+  if (!ok) {
+    console.error(
+      `[dev] Node ${process.versions.node} is not supported. Requires Node ${SUPPORTED_NODE_RANGE} (Vite 8 dependency; Node 21 is not supported).\n` +
+        `[dev] Use nvm: \`nvm use\` (see .nvmrc) or install a compatible version.`,
+    );
+    process.exit(1);
+  }
+}
+
+// `better-sqlite3` is a native module. After switching the Node version, the
+// prebuilt binary may target a different `NODE_MODULE_VERSION`, which makes
+// the API crash with ERR_DLOPEN_FAILED. `node --watch` swallows that crash
+// and keeps the process alive silently, so the user only sees a "Bad
+// Gateway" from the Vite proxy. Run an explicit preflight to turn this
+// silent failure into an actionable error before Turbo starts.
+function assertNativeModulesUsable() {
+  const require = createRequire(import.meta.url);
+  try {
+    require("better-sqlite3");
+  } catch (err) {
+    if (err && err.code === "ERR_DLOPEN_FAILED") {
+      console.error(
+        `[dev] better-sqlite3 native binary is incompatible with the current Node (${process.version}).\n` +
+          `[dev] Run: \`npm rebuild better-sqlite3\` and retry \`npm run dev\`.\n` +
+          `[dev] Original error: ${err.message}`,
+      );
+      process.exit(1);
+    }
+    // Re-throw other errors as-is so Turbo/Node can surface the stack trace.
+    throw err;
+  }
+}
+
 // Minimal root .env loader for local dev scripts. Supports single-line KEY=VALUE pairs only.
+// (helpers below: assertNodeVersion / assertNativeModulesUsable run before Turbo to fail fast)
 function parseEnvFile(path) {
   const entries = {};
   const lines = readFileSync(path, "utf8").split(/\r?\n/u);
@@ -62,6 +104,8 @@ function resolveMcpPort(value) {
 }
 
 loadRootEnv();
+assertNodeVersion();
+assertNativeModulesUsable();
 assertWorkspacePackagesResolveToSource();
 
 const filters = ["@aif/api", "@aif/web", "@aif/agent"];
