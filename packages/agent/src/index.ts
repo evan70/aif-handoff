@@ -1,3 +1,4 @@
+import { createRequire } from "node:module";
 import { createDbUsageSink, listProjects } from "@aif/data";
 import { getEnv, logger } from "@aif/shared";
 import { bootstrapRuntimeRegistry } from "@aif/runtime";
@@ -10,6 +11,29 @@ import { startPollScheduler } from "./pollScheduler.js";
 import { startLoginBroker, type BrokerServer } from "./codex/loginBroker.js";
 
 const log = logger("agent");
+
+// `ai-factory` is a hard runtime dependency: the runtime layer invokes its
+// CLI to scaffold `.ai-factory/` for every new project (see
+// `@aif/runtime/projectInit`). If it is missing locally, the runtime falls
+// back to `npx ai-factory ...`, which requires network access and a registry
+// hit at task-run time — fragile in air-gapped or production deploys
+// installed with `npm ci --omit=dev`. Probe at boot and warn loudly so the
+// failure is diagnosable from the first agent log line, not buried under a
+// later "skipped task" warning.
+function probeAiFactory(): void {
+  const localRequire = createRequire(import.meta.url);
+  try {
+    localRequire.resolve("ai-factory/bin/ai-factory.js");
+  } catch {
+    log.warn(
+      "ai-factory CLI is not installed locally. The agent will fall back to " +
+        "`npx ai-factory ...` for project scaffolding, which requires network " +
+        "access. Add `ai-factory` to dependencies (not devDependencies) and " +
+        "reinstall to make this offline-safe.",
+    );
+  }
+}
+probeAiFactory();
 
 // Validate env
 const env = getEnv();
