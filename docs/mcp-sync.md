@@ -6,7 +6,7 @@ The Handoff MCP server enables bidirectional synchronization between the Handoff
 
 ### Prerequisites
 
-- Node.js 20+
+- Node.js 22+
 - Installed dependencies: `npm install`
 
 ### Configuration
