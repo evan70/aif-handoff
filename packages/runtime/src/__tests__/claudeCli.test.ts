@@ -718,6 +718,22 @@ describe("runClaudeCli", () => {
     expect(env.CLAUDE_CONFIG_DIR).toBe("/tmp/test-claude-personal");
   });
 
+  it("forwards proxy env vars into the spawned subprocess env", async () => {
+    vi.stubEnv("ALL_PROXY", "socks5://proxy.example:1080");
+    vi.stubEnv("NO_PROXY", "localhost,.internal");
+
+    const promise = runClaudeCli(createInput());
+
+    simulateStreamAndClose(0, successfulStream({ sessionId: "sess-proxy-env", text: "Done" }));
+
+    await promise;
+
+    const { spawnOptions } = getSpawnInvocation();
+    const env = spawnOptions.env as Record<string, string>;
+    expect(env.ALL_PROXY).toBe("socks5://proxy.example:1080");
+    expect(env.NO_PROXY).toBe("localhost,.internal");
+  });
+
   it("lets execution.environment override profile.options.environment", async () => {
     const input = createInput({
       options: {

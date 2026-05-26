@@ -14,6 +14,7 @@ import { redactProviderText, redactProviderTextForLogs } from "@aif/shared";
 import { RuntimeExecutionError, type RuntimeExecutionErrorMetadata } from "../../errors.js";
 import { buildRuntimeLimitEvent } from "../../limitEvents.js";
 import { buildOpenAiCompatibleLimitSnapshot } from "../../openaiRateLimits.js";
+import { withProxyDispatcher } from "../../proxyEnv.js";
 import { isRetriableTimeoutError, resolveRetryDelay, sleepMs } from "../../timeouts.js";
 import { classifyCodexRuntimeError } from "./errors.js";
 
@@ -168,7 +169,7 @@ async function fetchWithRetries(
 
   for (let attempt = 0; ; attempt += 1) {
     try {
-      const response = await fetch(url, init);
+      const response = await fetch(url, withProxyDispatcher(url, init));
       if (isRetryableStatus(response.status) && attempt < maxRetries) {
         const delayMs = retryBackoffMs(attempt);
         logger?.warn?.(
@@ -686,10 +687,13 @@ export async function validateCodexAgentApiConnection(
   const url = `${baseUrl}/models`;
 
   try {
-    const response = await fetch(url, {
-      method: "GET",
-      headers: buildHeaders(input),
-    });
+    const response = await fetch(
+      url,
+      withProxyDispatcher(url, {
+        method: "GET",
+        headers: buildHeaders(input),
+      }),
+    );
     if (!response.ok) {
       return {
         ok: false,
@@ -717,10 +721,13 @@ export async function listCodexAgentApiModels(
   const url = `${baseUrl}/models`;
 
   try {
-    const response = await fetch(url, {
-      method: "GET",
-      headers: buildHeaders(inputWithOptions),
-    });
+    const response = await fetch(
+      url,
+      withProxyDispatcher(url, {
+        method: "GET",
+        headers: buildHeaders(inputWithOptions),
+      }),
+    );
     if (!response.ok) {
       const rawText = await response.text();
       return Promise.reject(

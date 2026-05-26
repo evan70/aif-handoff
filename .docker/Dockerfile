@@ -5,12 +5,15 @@ WORKDIR /app
 # so apt-get / npm / npx all pick it up during build.
 ARG HTTP_PROXY
 ARG HTTPS_PROXY
+ARG ALL_PROXY
 ARG NO_PROXY
 ENV HTTP_PROXY=${HTTP_PROXY} \
     HTTPS_PROXY=${HTTPS_PROXY} \
+    ALL_PROXY=${ALL_PROXY} \
     NO_PROXY=${NO_PROXY} \
     http_proxy=${HTTP_PROXY} \
     https_proxy=${HTTPS_PROXY} \
+    all_proxy=${ALL_PROXY} \
     no_proxy=${NO_PROXY}
 # Resilient apt wrapper — retries on transient mirror/CDN failures (Hash Sum
 # mismatch, sporadic 5xx). See script header for details. Available to all
@@ -69,12 +72,15 @@ FROM docker.angie.software/angie:1.11.4-alpine AS web
 # Proxy (optional) — separate ARGs because this stage does NOT inherit from `base`.
 ARG HTTP_PROXY
 ARG HTTPS_PROXY
+ARG ALL_PROXY
 ARG NO_PROXY
 ENV HTTP_PROXY=${HTTP_PROXY} \
     HTTPS_PROXY=${HTTPS_PROXY} \
+    ALL_PROXY=${ALL_PROXY} \
     NO_PROXY=${NO_PROXY} \
     http_proxy=${HTTP_PROXY} \
     https_proxy=${HTTPS_PROXY} \
+    all_proxy=${ALL_PROXY} \
     no_proxy=${NO_PROXY}
 RUN apk add --no-cache gettext
 COPY --from=build /app/packages/web/dist /usr/share/angie/html

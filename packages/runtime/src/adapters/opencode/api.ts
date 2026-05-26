@@ -13,6 +13,7 @@ import type {
 } from "../../types.js";
 import { getEnv, redactProviderText } from "@aif/shared";
 import { Agent, type Dispatcher } from "undici";
+import { resolveProxyDispatcher } from "../../proxyEnv.js";
 import { classifyOpenCodeRuntimeError, OpenCodeRuntimeAdapterError } from "./errors.js";
 
 export interface OpenCodeApiLogger {
@@ -326,7 +327,16 @@ async function requestJson<T>(
       body: options.body ? JSON.stringify(options.body) : undefined,
       signal: controller.signal,
     };
-    if (options.longRunning && getEnv().AIF_RUNTIME_OPENCODE_LONG_RUNNING_DISPATCHER_ENABLED) {
+    const useLongRunningDispatcher =
+      options.longRunning && getEnv().AIF_RUNTIME_OPENCODE_LONG_RUNNING_DISPATCHER_ENABLED;
+    const proxyDispatcher = resolveProxyDispatcher(
+      url,
+      process.env,
+      useLongRunningDispatcher ? { bodyTimeout: 0, headersTimeout: 0 } : {},
+    );
+    if (proxyDispatcher) {
+      requestInit.dispatcher = proxyDispatcher;
+    } else if (useLongRunningDispatcher) {
       requestInit.dispatcher = getLongRunningOpenCodeDispatcher();
     }
 

@@ -204,6 +204,11 @@ a {
   cursor: pointer;
 }
 
+.markdown-content ::selection {
+  color: var(--color-primary-foreground);
+  background: var(--color-primary);
+}
+
 /* Custom scrollbar */
 ::-webkit-scrollbar {
   width: 6px;

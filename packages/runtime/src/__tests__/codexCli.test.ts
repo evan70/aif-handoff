@@ -570,6 +570,28 @@ describe("codex cli transport", () => {
     await runPromise;
   });
 
+  it("forwards proxy env vars into the Codex CLI subprocess env", async () => {
+    const child = createMockChildProcess();
+    spawnMock.mockReturnValueOnce(child);
+
+    vi.stubEnv("ALL_PROXY", "socks5://proxy.example:1080");
+    vi.stubEnv("NO_PROXY", "localhost,.internal");
+
+    const runPromise = runCodexCli(createRunInput());
+
+    const [, , spawnOptions] = spawnMock.mock.calls[0] as [
+      string,
+      string[],
+      { env?: Record<string, string> },
+    ];
+    expect(spawnOptions.env?.ALL_PROXY).toBe("socks5://proxy.example:1080");
+    expect(spawnOptions.env?.NO_PROXY).toBe("localhost,.internal");
+
+    child.stdout.emit("data", "ok");
+    child.emit("close", 0);
+    await runPromise;
+  });
+
   it("kills process and throws timeout error when run exceeds timeout", async () => {
     vi.useFakeTimers();
     const child = createMockChildProcess();

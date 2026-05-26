@@ -18,9 +18,11 @@ function createModelDiscoveryInput(overrides: Record<string, unknown> = {}) {
 function clearProxyEnv() {
   vi.stubEnv("HTTP_PROXY", undefined);
   vi.stubEnv("HTTPS_PROXY", undefined);
+  vi.stubEnv("ALL_PROXY", undefined);
   vi.stubEnv("NO_PROXY", undefined);
   vi.stubEnv("http_proxy", undefined);
   vi.stubEnv("https_proxy", undefined);
+  vi.stubEnv("all_proxy", undefined);
   vi.stubEnv("no_proxy", undefined);
 }
 
@@ -60,9 +62,11 @@ describe("codex model discovery process helpers", () => {
   it("forwards HTTP(S)_PROXY / NO_PROXY env vars (both cases) for closed-network builds", () => {
     vi.stubEnv("HTTP_PROXY", "http://proxy.example.com:8080");
     vi.stubEnv("HTTPS_PROXY", "http://proxy.example.com:8080");
+    vi.stubEnv("ALL_PROXY", "socks5://proxy.example.com:1080");
     vi.stubEnv("NO_PROXY", "localhost,127.0.0.1,api,agent");
     vi.stubEnv("http_proxy", "http://proxy.example.com:8080");
     vi.stubEnv("https_proxy", "http://proxy.example.com:8080");
+    vi.stubEnv("all_proxy", "socks5://proxy.example.com:1080");
     vi.stubEnv("no_proxy", "localhost,127.0.0.1,api,agent");
 
     const result = buildCodexAppServerDiscoveryEnvWithStats(
@@ -75,39 +79,47 @@ describe("codex model discovery process helpers", () => {
 
     expect(result.env.HTTP_PROXY).toBe("http://proxy.example.com:8080");
     expect(result.env.HTTPS_PROXY).toBe("http://proxy.example.com:8080");
+    expect(result.env.ALL_PROXY).toBe("socks5://proxy.example.com:1080");
     expect(result.env.NO_PROXY).toBe("localhost,127.0.0.1,api,agent");
     expect(result.env.http_proxy).toBe("http://proxy.example.com:8080");
     expect(result.env.https_proxy).toBe("http://proxy.example.com:8080");
+    expect(result.env.all_proxy).toBe("socks5://proxy.example.com:1080");
     expect(result.env.no_proxy).toBe("localhost,127.0.0.1,api,agent");
   });
 
   it("mirrors uppercase proxy env vars into lowercase aliases when only uppercase is present", () => {
     vi.stubEnv("HTTP_PROXY", "http://proxy.example.com:8080");
     vi.stubEnv("HTTPS_PROXY", "http://proxy.example.com:8080");
+    vi.stubEnv("ALL_PROXY", "socks5://proxy.example.com:1080");
     vi.stubEnv("NO_PROXY", "localhost,127.0.0.1,api,agent");
 
     const result = buildCodexAppServerDiscoveryEnvWithStats(createModelDiscoveryInput());
 
     expect(result.env.HTTP_PROXY).toBe("http://proxy.example.com:8080");
     expect(result.env.HTTPS_PROXY).toBe("http://proxy.example.com:8080");
+    expect(result.env.ALL_PROXY).toBe("socks5://proxy.example.com:1080");
     expect(result.env.NO_PROXY).toBe("localhost,127.0.0.1,api,agent");
     expect(result.env.http_proxy).toBe("http://proxy.example.com:8080");
     expect(result.env.https_proxy).toBe("http://proxy.example.com:8080");
+    expect(result.env.all_proxy).toBe("socks5://proxy.example.com:1080");
     expect(result.env.no_proxy).toBe("localhost,127.0.0.1,api,agent");
   });
 
   it("mirrors lowercase proxy env vars into uppercase aliases when only lowercase is present", () => {
     vi.stubEnv("http_proxy", "http://proxy.example.com:8080");
     vi.stubEnv("https_proxy", "http://proxy.example.com:8080");
+    vi.stubEnv("all_proxy", "socks5://proxy.example.com:1080");
     vi.stubEnv("no_proxy", "localhost,127.0.0.1,api,agent");
 
     const result = buildCodexAppServerDiscoveryEnvWithStats(createModelDiscoveryInput());
 
     expect(result.env.http_proxy).toBe("http://proxy.example.com:8080");
     expect(result.env.https_proxy).toBe("http://proxy.example.com:8080");
+    expect(result.env.all_proxy).toBe("socks5://proxy.example.com:1080");
     expect(result.env.no_proxy).toBe("localhost,127.0.0.1,api,agent");
     expect(result.env.HTTP_PROXY).toBe("http://proxy.example.com:8080");
     expect(result.env.HTTPS_PROXY).toBe("http://proxy.example.com:8080");
+    expect(result.env.ALL_PROXY).toBe("socks5://proxy.example.com:1080");
     expect(result.env.NO_PROXY).toBe("localhost,127.0.0.1,api,agent");
   });
 

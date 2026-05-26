@@ -62,3 +62,4 @@ Before shipping any change that touches color classes:
 Append a dated entry whenever you fix a theme-readability bug. Keep entries one or two lines: the symptom, the cause, the fix.
 
 - **2026-04-28 — Fullscreen textarea overlay header.** Counter + collapse icon used `text-muted-foreground` on `bg-black/85` scrim. In light theme the muted token resolved to dark gray on dark scrim and was invisible. Fix: switched both elements to `text-white/80` with `hover:text-white`. File: `packages/web/src/components/ui/textarea.tsx`.
+- **2026-05-24 — Markdown inline code in task logs.** Inline code used a pale amber foreground on a light themed log surface and became worse under browser selection. Fix: pair markdown code with `text-primary` on themed surfaces and force markdown selection to `bg-primary` + `text-primary-foreground`. Files: `packages/web/src/components/ui/markdown.tsx`, `packages/web/src/index.css`.

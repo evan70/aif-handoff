@@ -5,7 +5,7 @@
 ## Prerequisites
 
 - **Docker** — Docker Desktop or compatible runtime
-- **Node.js** 22+ and **npm** 10+ — only needed if running without Docker
+- **Node.js** 20.19+ or 22.12+ and **npm** 10+ — only needed if running without Docker
 - **Claude Code CLI** — only needed if running without Docker (`npm i -g @anthropic-ai/claude-code`). The Agent SDK spawns Claude Code as a subprocess, so the CLI must be installed globally
 - **Claude subscription** or Anthropic API key (for agent features)
 

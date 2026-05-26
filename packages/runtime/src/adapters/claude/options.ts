@@ -8,6 +8,7 @@ import type {
 } from "../../types.js";
 import { isValidTrustToken } from "../../trust.js";
 import { buildClaudeHooks } from "./hooks.js";
+import { PROXY_ENV_VARS } from "../../proxyEnv.js";
 
 export interface ClaudeRuntimeExecutionOptions {
   maxBudgetUsd?: number | null;
@@ -201,12 +202,7 @@ const ALLOWED_ENV_PREFIXES = [
   "VISUAL",
   "FORCE_COLOR",
   "NO_COLOR",
-  "HTTP_PROXY",
-  "HTTPS_PROXY",
-  "NO_PROXY",
-  "http_proxy",
-  "https_proxy",
-  "no_proxy",
+  ...PROXY_ENV_VARS,
 ];
 
 function isAllowedEnvKey(key: string): boolean {

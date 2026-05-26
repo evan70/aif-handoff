@@ -954,6 +954,27 @@ describe("Claude runtime adapter", () => {
     expect(env).not.toHaveProperty("DROP_NUMBER");
   });
 
+  it("forwards proxy env vars to Claude SDK env", async () => {
+    vi.stubEnv("ANTHROPIC_API_KEY", "sk-ant-test");
+    vi.stubEnv("ALL_PROXY", "socks5://proxy.example:1080");
+    vi.stubEnv("NO_PROXY", "localhost,.internal");
+    queryMock.mockImplementation(immediateSuccess("proxy-env-ok"));
+    const adapter = createClaudeRuntimeAdapter();
+
+    await adapter.run(
+      createRunInput({
+        options: {
+          apiKeyEnvVar: "ANTHROPIC_API_KEY",
+        },
+      }),
+    );
+
+    expect(queryMock).toHaveBeenCalledTimes(1);
+    const env = queryMock.mock.calls[0][0].options.env as Record<string, string>;
+    expect(env.ALL_PROXY).toBe("socks5://proxy.example:1080");
+    expect(env.NO_PROXY).toBe("localhost,.internal");
+  });
+
   it("ignores arrays passed as profile.options.environment (plain-object guard)", async () => {
     vi.stubEnv("ANTHROPIC_API_KEY", "sk-ant-test");
     queryMock.mockImplementation(immediateSuccess("env-array"));
