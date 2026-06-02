@@ -32,6 +32,7 @@ export function TaskSettings({ task, onSave }: Props) {
   const [autoMode, setAutoMode] = useState(task.autoMode);
   const [skipReview, setSkipReview] = useState(task.skipReview);
   const [useSubagents, setUseSubagents] = useState(task.useSubagents);
+  const [autoQa, setAutoQa] = useState(task.autoQa);
   const [plannerMode, setPlannerMode] = useState<"full" | "fast">(
     task.plannerMode as "full" | "fast",
   );
@@ -59,6 +60,7 @@ export function TaskSettings({ task, onSave }: Props) {
     autoMode !== task.autoMode ||
     skipReview !== task.skipReview ||
     useSubagents !== task.useSubagents ||
+    autoQa !== task.autoQa ||
     maxReviewIterations !== task.maxReviewIterations ||
     (runtimeProfileId || null) !== (task.runtimeProfileId ?? null) ||
     (modelOverride.trim() || null) !== (task.modelOverride ?? null) ||
@@ -75,6 +77,7 @@ export function TaskSettings({ task, onSave }: Props) {
     if (autoMode !== task.autoMode) input.autoMode = autoMode;
     if (skipReview !== task.skipReview) input.skipReview = skipReview;
     if (useSubagents !== task.useSubagents) input.useSubagents = useSubagents;
+    if (autoQa !== task.autoQa) input.autoQa = autoQa;
     if (maxReviewIterations !== task.maxReviewIterations)
       input.maxReviewIterations = maxReviewIterations;
     if ((runtimeProfileId || null) !== (task.runtimeProfileId ?? null)) {
@@ -127,6 +130,7 @@ export function TaskSettings({ task, onSave }: Props) {
               setAutoMode(task.autoMode);
               setSkipReview(task.skipReview);
               setUseSubagents(task.useSubagents);
+              setAutoQa(task.autoQa);
               setMaxReviewIterations(task.maxReviewIterations);
               setPlannerMode(task.plannerMode as "full" | "fast");
               setPlanPath(task.planPath);
@@ -153,6 +157,9 @@ export function TaskSettings({ task, onSave }: Props) {
         </CheckboxField>
         <CheckboxField label="Use subagents" checked={useSubagents} onChange={setUseSubagents}>
           Run via custom subagents (plan-coordinator, implement-coordinator, sidecars).
+        </CheckboxField>
+        <CheckboxField label="Run QA after done" checked={autoQa} onChange={setAutoQa}>
+          Automatically run the QA pipeline when this task is approved (done → verified).
         </CheckboxField>
       </div>
 

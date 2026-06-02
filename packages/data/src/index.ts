@@ -130,6 +130,11 @@ export type TaskFieldsUpdate = {
   planTests?: boolean;
   skipReview?: boolean;
   useSubagents?: boolean;
+  autoQa?: boolean;
+  qaChangeSummary?: string | null;
+  qaTestPlan?: string | null;
+  qaTestCases?: string | null;
+  qaStatus?: "idle" | "running" | "done" | "error";
   implementationLog?: string | null;
   reviewComments?: string | null;
   agentActivityLog?: string | null;

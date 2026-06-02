@@ -12,7 +12,7 @@ import { AlertBox } from "@/components/ui/alert-box";
 import { getRuntimeLimitDisplay } from "@/lib/runtimeLimits";
 import { useUsageLimitsEnabled } from "@/hooks/useSettings";
 
-export type TaskDetailTab = "implementation" | "review" | "comments" | "activity";
+export type TaskDetailTab = "implementation" | "review" | "comments" | "activity" | "qa";
 
 const ACTION_BUTTONS_BY_STATUS: Partial<
   Record<
@@ -216,6 +216,7 @@ export function TaskDetailHeader({
           { value: "review", label: "Review" },
           { value: "comments", label: "Comments" },
           { value: "activity", label: "Activity" },
+          { value: "qa", label: "QA" },
         ]}
         value={activeTab}
         onValueChange={(v) => onTabChange(v as TaskDetailTab)}

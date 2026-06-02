@@ -514,6 +514,7 @@ The config is editable via the **Global Settings** dialog in the web UI (gear ic
 | `docs`         | `docs/`                       |
 | `rules_file`   | `.ai-factory/RULES.md`        |
 | `references`   | `.ai-factory/references/`     |
+| `qa`           | `.ai-factory/qa/`             |
 
 **`workflow`** — controls AI Factory workflow behavior:
 

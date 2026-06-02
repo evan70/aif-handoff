@@ -515,11 +515,88 @@ tasksRouter.post("/:id/events", jsonValidator(taskEventSchema), async (c) => {
       })();
     }
 
+    // Fire-and-forget: run /aif-qa when approved and autoQa is enabled on the task.
+    // approve_done moves the task done -> verified; QA runs asynchronously after.
+    if (event === "approve_done" && handled.task.autoQa) {
+      const { id: taskId, projectId, branchName, worktreePath } = handled.task;
+      if (!branchName) {
+        log.warn({ taskId }, "Auto QA skipped — no branchName on task");
+      } else {
+        const project = findProjectById(projectId);
+        if (!project) {
+          log.error({ taskId, projectId }, "Auto QA skipped — project not found");
+        } else {
+          const executionRoot = worktreePath ?? project.rootPath;
+          log.info({ taskId, branchName }, "Auto QA triggered (autoQa=true)");
+          broadcast({
+            type: "task:qa_started",
+            payload: { taskId, projectId, status: "started" },
+          });
+          void (async () => {
+            const { runQaQuery } = await import("../services/qaRunner.js");
+            const result = await runQaQuery({ projectId, taskId, executionRoot });
+            broadcast(
+              result.ok
+                ? { type: "task:qa_done", payload: { taskId, projectId, status: "done" } }
+                : {
+                    type: "task:qa_failed",
+                    payload: { taskId, projectId, status: "failed", error: result.error },
+                  },
+            );
+          })();
+        }
+      }
+    }
+
     return c.json(toTaskRouteResponse(handled.task));
   } catch (error) {
     log.error({ taskId: id, event, error }, "Task event handling failed");
     return c.json({ error: "Internal server error" }, 500);
   }
+});
+
+// POST /tasks/:id/run-qa — manually trigger the aif-qa pipeline (fire-and-forget)
+tasksRouter.post("/:id/run-qa", (c) => {
+  const { id } = c.req.param();
+  const task = findTaskById(id);
+  if (!task) {
+    return c.json({ error: "Task not found" }, 404);
+  }
+  const project = findProjectById(task.projectId);
+  if (!project) {
+    log.error({ taskId: id, projectId: task.projectId }, "QA cannot run — project not found");
+    return c.json({ error: "Project not found" }, 404);
+  }
+  if (task.qaStatus === "running") {
+    log.warn({ taskId: id }, "QA already running for task, skipping");
+    return c.json({ error: "QA already running" }, 409);
+  }
+  if (!task.branchName) {
+    log.warn({ taskId: id }, "QA cannot run — task has no branchName");
+    return c.json({ error: "Task has no branch" }, 409);
+  }
+
+  const projectId = task.projectId;
+  const executionRoot = task.worktreePath ?? project.rootPath;
+  log.info({ taskId: id, branchName: task.branchName }, "run-qa requested for task");
+  broadcast({
+    type: "task:qa_started",
+    payload: { taskId: id, projectId, status: "started" },
+  });
+  void (async () => {
+    const { runQaQuery } = await import("../services/qaRunner.js");
+    const result = await runQaQuery({ projectId, taskId: id, executionRoot });
+    broadcast(
+      result.ok
+        ? { type: "task:qa_done", payload: { taskId: id, projectId, status: "done" } }
+        : {
+            type: "task:qa_failed",
+            payload: { taskId: id, projectId, status: "failed", error: result.error },
+          },
+    );
+  })();
+
+  return c.json({ status: "accepted" }, 202);
 });
 
 // PATCH /tasks/:id/position — reorder within column
