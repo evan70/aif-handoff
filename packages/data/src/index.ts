@@ -901,6 +901,23 @@ export function updateTask(id: string, fields: TaskFieldsUpdate): TaskRow | unde
 }
 
 /**
+ * Atomically claim the QA "running" slot for a task. Performs a conditional
+ * UPDATE — `SET qa_status='running' WHERE id=? AND qa_status!='running'` — and
+ * returns true only when THIS call flipped the row (it won the transition and
+ * owns the run). Returns false when QA was already running, so concurrent
+ * manual + auto-trigger / double-POST starts are mutually exclusive at the DB
+ * and never spawn two runtime runs. Bumps `updatedAt` to mirror updateTask.
+ */
+export function tryStartQaRun(id: string): boolean {
+  const result = getDb()
+    .update(tasks)
+    .set({ qaStatus: "running", updatedAt: new Date().toISOString() })
+    .where(and(eq(tasks.id, id), ne(tasks.qaStatus, "running")))
+    .run();
+  return result.changes > 0;
+}
+
+/**
  * Write only the `position` column. Does NOT bump `updatedAt` — manual reorder
  * is metadata, not content, and must not disturb "updated at" sort views.
  */

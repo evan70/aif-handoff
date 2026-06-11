@@ -115,11 +115,37 @@ function readArtifact(path: string): string | null {
 }
 
 /**
- * Fire-and-forget entry point: run the aif-qa pipeline via the shared runtime
- * and persist the three artifacts + qaStatus on the task. Mirrors
- * `runCommitQuery` (services/commitGeneration.ts) — returns a structured
- * result and NEVER throws. Unlike commit, this runner broadcasts `task:updated`
- * itself so the UI picks up qaStatus/artifacts without racing the qa_* events.
+ * Single failure exit for runQaQuery: persist qaStatus:"error", broadcast the
+ * update, and return the structured { ok:false } result. Shared by the
+ * missing-artifact branch and the catch-all so neither re-implements error
+ * handling — and so runQaQuery returns ok:false directly rather than throwing
+ * to its own catch. Persistence is wrapped defensively: a DB failure here must
+ * not mask the original error.
+ */
+function persistQaError(taskId: string, error: string): RunQaQueryResult {
+  try {
+    updateTask(taskId, { qaStatus: "error" });
+    const errorTask = findTaskById(taskId);
+    if (errorTask) {
+      broadcast({ type: "task:updated", payload: toTaskBroadcastPayload(errorTask) });
+    }
+  } catch (persistErr) {
+    log.error({ persistErr, taskId }, "[QA] Failed to persist error status");
+  }
+  return { ok: false, error };
+}
+
+/**
+ * Fire-and-forget worker: run the aif-qa pipeline via the shared runtime and
+ * persist the three artifacts + a terminal qaStatus on the task. Mirrors
+ * `runCommitQuery` (services/commitGeneration.ts) — returns a structured result
+ * and NEVER throws. Broadcasts `task:updated` on completion so the UI picks up
+ * qaStatus/artifacts without racing the qa_* events.
+ *
+ * PRECONDITION: the caller must have already claimed the run by transitioning
+ * qaStatus to "running" (routes/tasks `startQaRun` → `tryStartQaRun`). This
+ * worker does NOT set "running" itself — it only finalizes to "done" / "error"
+ * — so the atomic claim stays the single point that serializes concurrent runs.
  */
 export async function runQaQuery(input: RunQaQueryInput): Promise<RunQaQueryResult> {
   const { projectId, taskId, executionRoot } = input;
@@ -131,36 +157,40 @@ export async function runQaQuery(input: RunQaQueryInput): Promise<RunQaQueryResu
     return { ok: false, error: msg };
   }
 
-  // Resolve the QA branch the same way the aif-qa skill does (Step 0.2): the
-  // task's persisted branch, or the current git branch as a fallback. This keeps
-  // the runner's slug in lockstep with the skill so CLI/API transports agree on
-  // the artifact directory even for branchless (fast-mode) tasks.
-  const resolvedBranch = resolveQaBranch(task.branchName, executionRoot);
-
-  // Resolve artifact paths deterministically BEFORE running the runtime so the
-  // exact paths can be baked into the prompt (CLI resolves /aif-qa --all to its
-  // own slug dir, but Codex-API/OpenRouter only execute the spelled-out prompt).
-  const cfg = getProjectConfig(executionRoot);
-  const qaRoot = join(executionRoot, cfg.paths.qa);
-  const branchSlug = computeQaBranchSlug(resolvedBranch, executionRoot);
-  const artifactDir = join(qaRoot, branchSlug);
-
-  log.info(
-    { taskId, branch: resolvedBranch, branchSource: task.branchName ? "task" : "git" },
-    "[QA] Starting QA run",
-  );
-  log.debug(
-    { taskId, executionRoot, qaRoot, branchSlug, artifactDir },
-    "[QA] Resolved artifact dir",
-  );
-
+  // Branch/config/slug resolution lives INSIDE the try alongside the runtime
+  // call so runQaQuery honors its "NEVER throws" contract. computeQaBranchSlug
+  // runs `git hash-object` against executionRoot; a stale/missing root (e.g. a
+  // deleted worktree) makes execFileSync throw synchronously. Without this guard
+  // the throw would escape the route's fire-and-forget dispatch with no
+  // task:qa_failed event and no persisted qaStatus:"error".
   try {
-    updateTask(taskId, { qaStatus: "running" });
-    const runningTask = findTaskById(taskId);
-    if (runningTask) {
-      broadcast({ type: "task:updated", payload: toTaskBroadcastPayload(runningTask) });
-    }
+    // Resolve the QA branch the same way the aif-qa skill does (Step 0.2): the
+    // task's persisted branch, or the current git branch as a fallback. This keeps
+    // the runner's slug in lockstep with the skill so CLI/API transports agree on
+    // the artifact directory even for branchless (fast-mode) tasks.
+    const resolvedBranch = resolveQaBranch(task.branchName, executionRoot);
 
+    // Resolve artifact paths deterministically BEFORE running the runtime so the
+    // exact paths can be baked into the prompt (CLI resolves /aif-qa --all to its
+    // own slug dir, but Codex-API/OpenRouter only execute the spelled-out prompt).
+    const cfg = getProjectConfig(executionRoot);
+    const qaRoot = join(executionRoot, cfg.paths.qa);
+    const branchSlug = computeQaBranchSlug(resolvedBranch, executionRoot);
+    const artifactDir = join(qaRoot, branchSlug);
+
+    log.info(
+      { taskId, branch: resolvedBranch, branchSource: task.branchName ? "task" : "git" },
+      "[QA] Starting QA run",
+    );
+    log.debug(
+      { taskId, executionRoot, qaRoot, branchSlug, artifactDir },
+      "[QA] Resolved artifact dir",
+    );
+
+    // qaStatus is already "running": the caller (routes/tasks startQaRun) claims
+    // the slot atomically via tryStartQaRun BEFORE dispatching this worker, which
+    // is what makes concurrent starts mutually exclusive. This worker only
+    // finalizes the run to "done" / "error".
     const prompt = buildQaPrompt(artifactDir);
 
     const { result } = await runApiRuntimeOneShot({
@@ -182,6 +212,26 @@ export async function runQaQuery(input: RunQaQueryInput): Promise<RunQaQueryResu
     const qaTestPlan = readArtifact(join(artifactDir, "test-plan.md"));
     const qaTestCases = readArtifact(join(artifactDir, "test-cases.md"));
 
+    // A successful QA run is defined as producing ALL THREE artifacts. If the
+    // runtime finished but one or more files are missing (null), fail the run
+    // rather than persisting a misleading qaStatus:"done" with gaps. This is a
+    // validation failure (not a runtime exception), so we return ok:false
+    // directly with an actionable message — no throwing to our own catch.
+    const missingArtifacts = (
+      [
+        ["change-summary.md", qaChangeSummary],
+        ["test-plan.md", qaTestPlan],
+        ["test-cases.md", qaTestCases],
+      ] as const
+    )
+      .filter(([, content]) => content === null)
+      .map(([name]) => name);
+    if (missingArtifacts.length > 0) {
+      const msg = `QA run did not produce required artifact(s): ${missingArtifacts.join(", ")}`;
+      log.error({ taskId, artifactDir, missingArtifacts }, `[QA] ${msg}`);
+      return persistQaError(taskId, msg);
+    }
+
     updateTask(taskId, {
       qaStatus: "done",
       qaChangeSummary,
@@ -199,17 +249,6 @@ export async function runQaQuery(input: RunQaQueryInput): Promise<RunQaQueryResu
     const category = err instanceof RuntimeExecutionError ? err.category : "unknown";
     const message = err instanceof Error ? err.message : String(err);
     log.error({ err, taskId, projectId, category }, "[QA] QA failed");
-
-    try {
-      updateTask(taskId, { qaStatus: "error" });
-      const errorTask = findTaskById(taskId);
-      if (errorTask) {
-        broadcast({ type: "task:updated", payload: toTaskBroadcastPayload(errorTask) });
-      }
-    } catch (persistErr) {
-      log.error({ persistErr, taskId }, "[QA] Failed to persist error status");
-    }
-
-    return { ok: false, error: message };
+    return persistQaError(taskId, message);
   }
 }

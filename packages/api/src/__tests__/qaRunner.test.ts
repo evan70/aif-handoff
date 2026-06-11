@@ -113,14 +113,14 @@ describe("runQaQuery", () => {
     expect(arg.usageContext).toEqual({ source: "qa" });
   });
 
-  it("sets qaStatus running BEFORE the runtime call", async () => {
+  it("does NOT set qaStatus running — the caller claims that slot atomically", async () => {
+    // The running transition moved to routes/tasks startQaRun (tryStartQaRun) so
+    // concurrent starts are serialized at the DB. The worker only finalizes the
+    // run, so it must never write qaStatus:"running" itself.
     const slug = computeQaBranchSlug(BRANCH, root);
     writeArtifacts(join(root, ".ai-factory/qa", slug));
     await runQaQuery({ projectId: "p1", taskId: "t1", executionRoot: root });
-    expect(mockUpdateTask).toHaveBeenCalledWith("t1", { qaStatus: "running" });
-    expect(mockUpdateTask.mock.invocationCallOrder[0]).toBeLessThan(
-      mockRunApiRuntimeOneShot.mock.invocationCallOrder[0],
-    );
+    expect(mockUpdateTask).not.toHaveBeenCalledWith("t1", { qaStatus: "running" });
   });
 
   it("persists qaStatus done + three artifacts on success", async () => {
@@ -146,18 +146,21 @@ describe("runQaQuery", () => {
     expect(doneCall?.[1].qaChangeSummary).toBe("# Change Summary\nstuff");
   });
 
-  it("stores null for a missing artifact without throwing (Nullable Cast Rule)", async () => {
+  it("fails the run (ok:false, qaStatus error) when required artifacts are missing", async () => {
     const slug = computeQaBranchSlug(BRANCH, root);
     const dir = join(root, ".ai-factory/qa", slug);
     mkdirSync(dir, { recursive: true });
     writeFileSync(join(dir, "change-summary.md"), "# only summary");
     // test-plan.md and test-cases.md intentionally missing
     const res = await runQaQuery({ projectId: "p1", taskId: "t1", executionRoot: root });
-    expect(res.ok).toBe(true);
-    const doneCall = mockUpdateTask.mock.calls.find((c) => c[1]?.qaStatus === "done");
-    expect(doneCall?.[1].qaChangeSummary).toBe("# only summary");
-    expect(doneCall?.[1].qaTestPlan).toBeNull();
-    expect(doneCall?.[1].qaTestCases).toBeNull();
+    expect(res.ok).toBe(false);
+    // Actionable error names every missing file and only those.
+    expect(res.error).toContain("test-plan.md");
+    expect(res.error).toContain("test-cases.md");
+    expect(res.error).not.toContain("change-summary.md");
+    // Persists the error status and never claims "done".
+    expect(mockUpdateTask).toHaveBeenCalledWith("t1", { qaStatus: "error" });
+    expect(mockUpdateTask.mock.calls.some((c) => c[1]?.qaStatus === "done")).toBe(false);
   });
 
   it("sets qaStatus error and returns ok:false when runtime throws", async () => {
@@ -166,5 +169,19 @@ describe("runQaQuery", () => {
     expect(res.ok).toBe(false);
     expect(res.error).toBe("boom");
     expect(mockUpdateTask).toHaveBeenCalledWith("t1", { qaStatus: "error" });
+  });
+
+  it("never throws when slug resolution fails on a stale executionRoot", async () => {
+    // A non-existent root makes computeQaBranchSlug's `git hash-object`
+    // (execFileSync with a missing cwd) throw synchronously — that throw used to
+    // escape before the try block (e.g. a deleted worktree). It must now be
+    // caught, persisted as qaStatus:"error", and returned as ok:false.
+    const staleRoot = join(root, "deleted-worktree"); // never created → cwd missing
+    const res = await runQaQuery({ projectId: "p1", taskId: "t1", executionRoot: staleRoot });
+    expect(res.ok).toBe(false);
+    expect(res.error).toBeTruthy();
+    expect(mockUpdateTask).toHaveBeenCalledWith("t1", { qaStatus: "error" });
+    // Resolution failed first, so the runtime is never invoked.
+    expect(mockRunApiRuntimeOneShot).not.toHaveBeenCalled();
   });
 });

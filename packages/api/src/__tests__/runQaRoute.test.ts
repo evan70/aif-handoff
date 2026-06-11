@@ -84,6 +84,19 @@ describe("POST /tasks/:id/run-qa", () => {
     expect(mockRunQaQuery).not.toHaveBeenCalled();
   });
 
+  it("serializes concurrent starts: a second POST gets 409 (atomic running claim)", async () => {
+    seedTask(); // qaStatus idle
+    const first = await app.request("/tasks/t1/run-qa", { method: "POST" });
+    expect(first.status).toBe(202);
+    // The first request synchronously claimed qaStatus:"running" via the
+    // compare-and-set; the mocked runner never resets it, mirroring an in-flight
+    // run. A second POST must lose the claim and not start a duplicate run.
+    const second = await app.request("/tasks/t1/run-qa", { method: "POST" });
+    expect(second.status).toBe(409);
+    await new Promise((r) => setTimeout(r, 0));
+    expect(mockRunQaQuery).toHaveBeenCalledTimes(1);
+  });
+
   it("returns 202 for a branchless task (runner resolves the branch via git)", async () => {
     seedTask({ branchName: null });
     const res = await app.request("/tasks/t1/run-qa", { method: "POST" });
